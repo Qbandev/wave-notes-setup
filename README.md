@@ -83,35 +83,7 @@ The uninstaller will:
 - Optionally delete your notes folder (with confirmation)
 - Optionally delete the config file
 
-## Optional Enhancements
-
-### Fuzzy Search with fzf
-
-Install fzf for powerful note searching:
-
-```bash
-brew install fzf
-```
-
-Add this alias to your shell profile (`~/.zshrc` or `~/.bashrc`):
-
-```bash
-alias sn='find ~/Documents/WaveNotes -name "*.md" | fzf --preview "cat {}" | xargs -r wsh edit'
-```
-
-Now type `sn` to fuzzy-search your notes.
-
-### Keyboard Shortcut (Cmd+Shift+N)
-
-1. Open **Automator** and create a new **Quick Action**
-2. Set "Workflow receives current" to **no input** in **any application**
-3. Add "Run Shell Script" action with:
-   ```bash
-   ~/bin/wave-scratch.sh
-   ```
-4. Save as "WaveScratchpad"
-5. Go to **System Settings > Keyboard > Keyboard Shortcuts > Services**
-6. Find "WaveScratchpad" and assign **Cmd+Shift+N**
+## Optional Enhancement
 
 ### iCloud Sync
 
