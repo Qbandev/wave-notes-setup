@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Wave Terminal Documentation
+    url: https://docs.waveterm.dev/
+    about: Check the official Wave Terminal documentation
+  - name: Wave Terminal Issues
+    url: https://github.com/wavetermdev/waveterm/issues
+    about: For issues with Wave Terminal itself (not this setup tool)

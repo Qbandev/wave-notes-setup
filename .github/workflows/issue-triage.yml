@@ -1,0 +1,137 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check if first contribution
+        id: first_contribution
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              creator: context.payload.issue.user.login,
+              state: 'all'
+            });
+            // First issue if this is the only one
+            const isFirst = issues.length === 1;
+            core.setOutput('is_first', isFirst);
+            return isFirst;
+
+      - name: Analyze and label issue
+        uses: actions/github-script@v7
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          script: |
+            const https = require('https');
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const combined = `${title} ${body}`;
+
+            // Rule-based labeling (fast, no API needed)
+            const labels = [];
+
+            // Type detection
+            if (combined.includes('bug') || combined.includes('error') ||
+                combined.includes('crash') || combined.includes('fail') ||
+                combined.includes('broken') || combined.includes('not working')) {
+              labels.push('bug');
+            } else if (combined.includes('feature') || combined.includes('request') ||
+                       combined.includes('add support') || combined.includes('would be nice') ||
+                       combined.includes('enhancement')) {
+              labels.push('enhancement');
+            } else if (combined.includes('question') || combined.includes('how do') ||
+                       combined.includes('how to') || combined.includes('?')) {
+              labels.push('question');
+            } else if (combined.includes('doc') || combined.includes('readme') ||
+                       combined.includes('typo')) {
+              labels.push('documentation');
+            }
+
+            // Component detection
+            if (combined.includes('install') || combined.includes('setup')) {
+              labels.push('install');
+            }
+            if (combined.includes('uninstall') || combined.includes('remove')) {
+              labels.push('uninstall');
+            }
+            if (combined.includes('widget') || combined.includes('sidebar')) {
+              labels.push('widgets');
+            }
+            if (combined.includes('homebrew') || combined.includes('brew')) {
+              labels.push('homebrew');
+            }
+
+            // Priority detection
+            if (combined.includes('urgent') || combined.includes('critical') ||
+                combined.includes('security') || combined.includes('data loss')) {
+              labels.push('priority: high');
+            }
+
+            // Apply labels if any detected
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+              console.log(`Applied labels: ${labels.join(', ')}`);
+            }
+
+            // Check if bug report is missing reproduction steps
+            const isBug = labels.includes('bug');
+            const hasReproSteps = body.includes('steps to reproduce') ||
+                                  body.includes('reproduction') ||
+                                  body.includes('1.') ||
+                                  body.includes('- ') ||
+                                  body.length > 200;
+
+            // Build response comment
+            let comment = '';
+            const isFirstContribution = ${{ steps.first_contribution.outputs.is_first }};
+
+            if (isFirstContribution) {
+              comment += `Welcome to wave-notes-setup! Thanks for opening your first issue here.\n\n`;
+            }
+
+            if (isBug && !hasReproSteps) {
+              comment += `Thanks for reporting this issue!\n\n`;
+              comment += `To help us investigate, please provide:\n`;
+              comment += `- **Steps to reproduce** the issue\n`;
+              comment += `- **Expected behavior** vs **actual behavior**\n`;
+              comment += `- **Environment**: macOS version, Wave Terminal version\n`;
+              comment += `- **Error messages** (if any)\n\n`;
+              comment += `This information will help us resolve your issue faster.\n`;
+            } else if (labels.includes('enhancement')) {
+              comment += `Thanks for the feature request!\n\n`;
+              comment += `We'll review this and consider it for a future release. `;
+              comment += `Feel free to submit a PR if you'd like to implement it yourself!\n`;
+            } else if (labels.includes('question')) {
+              comment += `Thanks for your question!\n\n`;
+              comment += `While we review this, you might find helpful information in:\n`;
+              comment += `- [README](https://github.com/${context.repo.owner}/${context.repo.repo}#readme)\n`;
+              comment += `- [Wave Terminal Docs](https://docs.waveterm.dev/)\n`;
+            }
+
+            // Post comment if we have something to say
+            if (comment) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: comment
+              });
+            }
