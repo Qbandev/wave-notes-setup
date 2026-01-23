@@ -4,7 +4,9 @@
 # Set up test environment
 setup_test_environment() {
     # Create temporary directories for testing
-    export TEST_HOME="$(mktemp -d)"
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    export TEST_HOME="$temp_dir"
     export HOME="$TEST_HOME"
     export TEST_WAVETERM_CONFIG="$TEST_HOME/.config/waveterm"
     export TEST_NOTES_DIR="$TEST_HOME/Documents/WaveNotes"
@@ -130,7 +132,8 @@ assert_json_not_has_key() {
             return 1
         fi
     else
-        if python3 -c "import json; d=json.load(open('$file')); assert '$key' not in d" 2>/dev/null; then
+        # Check if key EXISTS - if so, return error
+        if python3 -c "import json; d=json.load(open('$file')); assert '$key' in d" 2>/dev/null; then
             echo "Expected JSON NOT to have key: $key"
             return 1
         fi

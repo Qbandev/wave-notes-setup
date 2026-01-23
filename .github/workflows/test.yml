@@ -13,11 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run ShellCheck
+      - name: Run ShellCheck on main scripts
         uses: ludeeus/action-shellcheck@master
         with:
           scandir: '.'
           ignore_paths: 'test'
+
+      - name: Run ShellCheck on test helper
+        run: shellcheck test/test_helper.bash
 
   bats:
     name: Bats Tests

@@ -39,7 +39,6 @@ WAVETERM_CONFIG=""
 # Runtime variables
 NOTES_DIR=""
 BIN_DIR=""
-WAVETERM_CONFIG=""
 # shellcheck disable=SC2034  # FORCE reserved for future use
 FORCE=false
 VERBOSE=false
@@ -71,13 +70,6 @@ print_verbose() {
     if [[ "$VERBOSE" == true ]]; then
         echo -e "${BLUE}[DEBUG]${NC} $1"
     fi
-}
-
-# Shell-escape single quotes for use in single-quoted strings
-# Replaces ' with '\'' (end quote, escaped quote, start quote)
-shell_escape() {
-    local input="$1"
-    echo "${input//\'/\'\\\'\'}"
 }
 
 # ============================================================================
@@ -257,17 +249,23 @@ get_max_display_order() {
         if command -v jq >/dev/null 2>&1; then
             max_order=$(jq '[.[] | ."display:order" // 0] | max // 0' "$widgets_file" 2>/dev/null || echo 0)
         else
-            max_order=$(python3 -c "
+            # Python fallback: output format is "value|error" (error empty on success)
+            local python_output
+            python_output=$(python3 -c "
 import json
-import sys
 try:
     with open('$widgets_file', 'r') as f:
         data = json.load(f)
     orders = [v.get('display:order', 0) for v in data.values() if isinstance(v, dict)]
-    print(max(orders) if orders else 0)
-except:
-    print(0)
-" 2>/dev/null || echo 0)
+    print(str(max(orders) if orders else 0) + '|')
+except Exception as e:
+    print('0|' + str(e))
+" 2>/dev/null || echo "0|python execution failed")
+            max_order="${python_output%%|*}"
+            local python_err="${python_output#*|}"
+            if [[ -n "$python_err" ]]; then
+                print_verbose "Python JSON parsing warning: $python_err"
+            fi
         fi
     fi
 
@@ -288,15 +286,22 @@ get_existing_order() {
     if command -v jq >/dev/null 2>&1; then
         order=$(jq -r ".[\"$key\"][\"display:order\"] // \"$default\"" "$widgets_file" 2>/dev/null || echo "$default")
     else
-        order=$(python3 -c "
+        # Python fallback: output format is "value|error" (error empty on success)
+        local python_output
+        python_output=$(python3 -c "
 import json
 try:
     with open('$widgets_file', 'r') as f:
         data = json.load(f)
-    print(data.get('$key', {}).get('display:order', '$default'))
-except:
-    print('$default')
-" 2>/dev/null || echo "$default")
+    print(str(data.get('$key', {}).get('display:order', '$default')) + '|')
+except Exception as e:
+    print('$default|' + str(e))
+" 2>/dev/null || echo "$default|python execution failed")
+        order="${python_output%%|*}"
+        local python_err="${python_output#*|}"
+        if [[ -n "$python_err" ]]; then
+            print_verbose "Python JSON parsing warning: $python_err"
+        fi
     fi
 
     echo "$order"

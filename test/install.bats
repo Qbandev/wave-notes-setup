@@ -56,38 +56,6 @@ teardown() {
 }
 
 # =============================================================================
-# shell_escape() tests
-# =============================================================================
-
-@test "shell_escape: escapes single quotes" {
-    run shell_escape "it's a test"
-
-    [ "$status" -eq 0 ]
-    [ "$output" = "it'\\''s a test" ]
-}
-
-@test "shell_escape: handles paths with spaces" {
-    run shell_escape "/path/with spaces/file"
-
-    [ "$status" -eq 0 ]
-    [ "$output" = "/path/with spaces/file" ]
-}
-
-@test "shell_escape: handles multiple single quotes" {
-    run shell_escape "it's Bob's test"
-
-    [ "$status" -eq 0 ]
-    [ "$output" = "it'\\''s Bob'\\''s test" ]
-}
-
-@test "shell_escape: returns unchanged string without quotes" {
-    run shell_escape "/simple/path"
-
-    [ "$status" -eq 0 ]
-    [ "$output" = "/simple/path" ]
-}
-
-# =============================================================================
 # load_config() tests
 # =============================================================================
 

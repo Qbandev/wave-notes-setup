@@ -1,8 +1,12 @@
+# Homebrew formula for wave-notes-setup
+# To calculate SHA256 after creating a GitHub release:
+#   curl -sL https://github.com/qbandev/wave-notes-setup/archive/v1.0.0.tar.gz | shasum -a 256
 class WaveNotesSetup < Formula
   desc "Configure Wave Terminal with a Warp-like notes system"
   homepage "https://github.com/qbandev/wave-notes-setup"
   url "https://github.com/qbandev/wave-notes-setup/archive/v1.0.0.tar.gz"
-  sha256 "REPLACE_WITH_ACTUAL_SHA256"
+  # TODO: Replace with actual SHA256 after creating GitHub release v1.0.0
+  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
   license "MIT"
 
   depends_on "jq"

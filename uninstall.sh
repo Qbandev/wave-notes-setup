@@ -169,7 +169,13 @@ main() {
     echo ""
 
     load_config
-    remove_widgets
+
+    # Check if Wave Terminal is installed
+    if [[ -z "$WAVETERM_CONFIG" ]]; then
+        print_warning "Wave Terminal config not found, skipping widget removal."
+    else
+        remove_widgets
+    fi
     remove_script
     prompt_notes_deletion
     prompt_config_deletion
