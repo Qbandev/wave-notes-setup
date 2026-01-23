@@ -10,6 +10,7 @@ After running the installer, you'll have two new sidebar widgets in Wave Termina
 |--------|-------------|
 | **New Note** | Creates a timestamped markdown note and opens it in Wave's editor |
 | **All Notes** | Directory browser showing all your notes |
+<img width="1122" height="984" alt="image" src="https://github.com/user-attachments/assets/c9b15a6c-741e-457c-8ffb-3163c567a1dc" />
 
 ## Installation
 
