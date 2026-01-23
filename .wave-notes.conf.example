@@ -1,0 +1,12 @@
+# wave-notes-setup configuration
+# Copy this file to ~/.wave-notes.conf to customize
+
+# Directory where notes will be stored
+NOTES_DIR="$HOME/Documents/WaveNotes"
+
+# Directory where the scratchpad script will be installed
+BIN_DIR="$HOME/bin"
+
+# You can also use environment variables instead:
+# export WAVE_NOTES_DIR="$HOME/Dropbox/Notes"
+# export WAVE_BIN_DIR="$HOME/.local/bin"

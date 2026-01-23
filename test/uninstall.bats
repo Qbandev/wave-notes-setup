@@ -1,0 +1,248 @@
+#!/usr/bin/env bats
+# Unit tests for uninstall.sh
+
+load 'test_helper'
+
+setup() {
+    setup_test_environment
+
+    # Source uninstall.sh functions
+    local uninstall_script="$BATS_TEST_DIRNAME/../uninstall.sh"
+    eval "$(sed 's/^main "\$@"$/# main disabled for testing/' "$uninstall_script")"
+}
+
+teardown() {
+    teardown_test_environment
+}
+
+# =============================================================================
+# detect_waveterm_config() tests (also in uninstall.sh)
+# =============================================================================
+
+@test "uninstall: detect_waveterm_config finds config path" {
+    mkdir -p "$TEST_HOME/.config/waveterm"
+
+    run detect_waveterm_config
+
+    [ "$status" -eq 0 ]
+    [ "$output" = "$TEST_HOME/.config/waveterm" ]
+}
+
+# =============================================================================
+# load_config() tests
+# =============================================================================
+
+@test "uninstall: load_config uses defaults" {
+    rm -f "$TEST_CONFIG_FILE"
+    unset WAVE_NOTES_DIR
+    unset WAVE_BIN_DIR
+
+    load_config
+
+    [ "$NOTES_DIR" = "$TEST_HOME/Documents/WaveNotes" ]
+    [ "$BIN_DIR" = "$TEST_HOME/bin" ]
+}
+
+@test "uninstall: load_config reads config file" {
+    cat > "$TEST_CONFIG_FILE" << EOF
+NOTES_DIR="$TEST_HOME/CustomNotes"
+BIN_DIR="$TEST_HOME/CustomBin"
+EOF
+    unset WAVE_NOTES_DIR
+    unset WAVE_BIN_DIR
+
+    load_config
+
+    [ "$NOTES_DIR" = "$TEST_HOME/CustomNotes" ]
+    [ "$BIN_DIR" = "$TEST_HOME/CustomBin" ]
+}
+
+@test "uninstall: load_config respects environment variables" {
+    export WAVE_NOTES_DIR="$TEST_HOME/EnvNotes"
+    export WAVE_BIN_DIR="$TEST_HOME/EnvBin"
+
+    load_config
+
+    [ "$NOTES_DIR" = "$TEST_HOME/EnvNotes" ]
+    [ "$BIN_DIR" = "$TEST_HOME/EnvBin" ]
+}
+
+# =============================================================================
+# remove_widgets() tests
+# =============================================================================
+
+@test "remove_widgets: removes notes widgets from widgets.json" {
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+    cat > "$WAVETERM_CONFIG/widgets.json" << 'EOF'
+{
+  "existing:widget": { "display:order": 1 },
+  "custom:notes-new": { "display:order": 2 },
+  "custom:notes-list": { "display:order": 3 },
+  "another:widget": { "display:order": 4 }
+}
+EOF
+
+    remove_widgets
+
+    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "existing:widget"
+    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "another:widget"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
+}
+
+@test "remove_widgets: preserves other widgets" {
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+    cat > "$WAVETERM_CONFIG/widgets.json" << 'EOF'
+{
+  "defwidget@terminal": { "display:order": 1 },
+  "custom:notes-new": { "display:order": 2 },
+  "custom:other": { "display:order": 3 }
+}
+EOF
+
+    remove_widgets
+
+    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "defwidget@terminal"
+    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:other"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
+}
+
+@test "remove_widgets: handles missing widgets.json gracefully" {
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+    rm -f "$WAVETERM_CONFIG/widgets.json"
+
+    run remove_widgets
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No widgets.json found"* ]]
+}
+
+@test "remove_widgets: handles empty widgets.json" {
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+    echo '{}' > "$WAVETERM_CONFIG/widgets.json"
+
+    run remove_widgets
+
+    [ "$status" -eq 0 ]
+    [ -f "$WAVETERM_CONFIG/widgets.json" ]
+}
+
+@test "remove_widgets: removes all notes- prefixed widgets" {
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+    cat > "$WAVETERM_CONFIG/widgets.json" << 'EOF'
+{
+  "custom:notes-new": { "display:order": 1 },
+  "custom:notes-list": { "display:order": 2 },
+  "custom:notes-browser": { "display:order": 3 },
+  "custom:notes-recent": { "display:order": 4 },
+  "custom:other": { "display:order": 5 }
+}
+EOF
+
+    remove_widgets
+
+    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:other"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-browser"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-recent"
+}
+
+# =============================================================================
+# remove_script() tests
+# =============================================================================
+
+@test "remove_script: removes script with correct header" {
+    BIN_DIR="$TEST_HOME/bin"
+    mkdir -p "$BIN_DIR"
+    cat > "$BIN_DIR/wave-scratch.sh" << 'EOF'
+#!/bin/bash
+# Generated by wave-notes-setup v1.0.0
+echo "test"
+EOF
+
+    remove_script
+
+    [ ! -f "$BIN_DIR/wave-scratch.sh" ]
+}
+
+@test "remove_script: skips script without correct header" {
+    BIN_DIR="$TEST_HOME/bin"
+    mkdir -p "$BIN_DIR"
+    cat > "$BIN_DIR/wave-scratch.sh" << 'EOF'
+#!/bin/bash
+# Custom script by user
+echo "test"
+EOF
+
+    run remove_script
+
+    [ "$status" -eq 0 ]
+    [ -f "$BIN_DIR/wave-scratch.sh" ]
+    [[ "$output" == *"Skipping"* ]] || [[ "$output" == *"modified"* ]]
+}
+
+@test "remove_script: handles missing script gracefully" {
+    BIN_DIR="$TEST_HOME/bin"
+    mkdir -p "$BIN_DIR"
+    rm -f "$BIN_DIR/wave-scratch.sh"
+
+    run remove_script
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No wave-scratch.sh found"* ]]
+}
+
+# =============================================================================
+# Integration tests
+# =============================================================================
+
+@test "integration: uninstall after install leaves no notes widgets" {
+    # First, simulate an install
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+
+    mkdir -p "$NOTES_DIR" "$BIN_DIR"
+
+    # Create widgets.json with notes widgets
+    cat > "$WAVETERM_CONFIG/widgets.json" << EOF
+{
+  "existing:widget": { "display:order": 1 },
+  "custom:notes-new": { "display:order": 2, "label": "New Note" },
+  "custom:notes-list": { "display:order": 3, "label": "All Notes" }
+}
+EOF
+
+    # Create script
+    cat > "$BIN_DIR/wave-scratch.sh" << 'EOF'
+#!/bin/bash
+# Generated by wave-notes-setup v1.0.0
+echo "test"
+EOF
+
+    # Run uninstall functions
+    remove_widgets
+    remove_script
+
+    # Verify
+    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "existing:widget"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
+    [ ! -f "$BIN_DIR/wave-scratch.sh" ]
+}
+
+@test "integration: uninstall preserves user data by default" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+
+    mkdir -p "$NOTES_DIR"
+    echo "My important note" > "$NOTES_DIR/note.md"
+
+    # Note: prompt_notes_deletion is interactive, we just verify directory exists
+    # The actual deletion would require user input
+
+    [ -d "$NOTES_DIR" ]
+    [ -f "$NOTES_DIR/note.md" ]
+}

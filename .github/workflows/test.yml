@@ -1,0 +1,56 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          ignore_paths: 'test'
+
+  bats:
+    name: Bats Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats
+        run: brew install bats-core
+
+      - name: Run tests
+        run: bats test/*.bats
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for common issues
+        run: |
+          # Check for hardcoded user paths
+          if grep -r '/Users/[a-zA-Z]' --include='*.sh' --exclude-dir=test .; then
+            echo "ERROR: Found hardcoded user paths"
+            exit 1
+          fi
+
+          # Check for set -euo pipefail
+          for f in install.sh uninstall.sh; do
+            if ! grep -q 'set -euo pipefail' "$f"; then
+              echo "ERROR: $f missing 'set -euo pipefail'"
+              exit 1
+            fi
+          done
+
+          echo "All lint checks passed!"
