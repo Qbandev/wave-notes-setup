@@ -2,123 +2,89 @@ name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
   pull-requests: write
 
 jobs:
-  review:
+  copilot-review:
+    name: Request Copilot Review
     runs-on: ubuntu-latest
-    # Skip if PR is from a fork (no access to secrets)
+    # Only run on PRs from the same repo (not forks)
     if: github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Get changed files
-        id: changed
-        run: |
-          files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
-          echo "files<<EOF" >> $GITHUB_OUTPUT
-          echo "$files" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Get diff
-        id: diff
-        run: |
-          # Get diff, limit to 10000 chars to stay within token limits
-          diff=$(git diff origin/${{ github.base_ref }}...HEAD | head -c 10000)
-          echo "diff<<EOF" >> $GITHUB_OUTPUT
-          echo "$diff" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: AI Review
+      - name: Request GitHub Copilot Review
         uses: actions/github-script@v7
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CHANGED_FILES: ${{ steps.changed.outputs.files }}
-          DIFF_CONTENT: ${{ steps.diff.outputs.diff }}
         with:
           script: |
-            const https = require('https');
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                reviewers: ['copilot-pull-request-reviewer[bot]']
+              });
+              console.log('Successfully requested Copilot review');
+            } catch (error) {
+              // Copilot might not be enabled or already requested
+              if (error.status === 422) {
+                console.log('Copilot review already requested or not available');
+              } else {
+                console.log(`Note: Could not request Copilot review: ${error.message}`);
+              }
+              // Don't fail the workflow - this is optional
+            }
 
-            // Skip if no API key configured
-            if (!process.env.ANTHROPIC_API_KEY) {
-              console.log('ANTHROPIC_API_KEY not configured, skipping AI review');
+      - name: Add review checklist comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Check if we already commented
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' &&
+              c.body.includes('## Review Checklist')
+            );
+
+            if (botComment) {
+              console.log('Review checklist already posted');
               return;
             }
 
-            const prompt = `You are reviewing a pull request for wave-notes-setup, a CLI tool that configures Wave Terminal with a Warp-like notes system.
+            const checklist = `## Review Checklist
 
-            Project context:
-            - Shell scripts (bash) using set -euo pipefail
-            - Uses jq with Python fallback for JSON processing
-            - Installs widgets to ~/.config/waveterm/widgets.json
-            - Must support both old (~/.waveterm) and new (~/.config/waveterm) paths
+            Please ensure the following before merging:
 
-            Changed files:
-            ${process.env.CHANGED_FILES}
+            ### Code Quality
+            - [ ] \`shellcheck install.sh uninstall.sh\` passes
+            - [ ] \`bats test/*.bats\` - all tests pass
+            - [ ] No hardcoded user paths (use \`$HOME\`, \`$NOTES_DIR\`, etc.)
 
-            Diff:
-            ${process.env.DIFF_CONTENT}
+            ### Testing
+            - [ ] Tested fresh install on clean Wave Terminal config
+            - [ ] Tested install with existing widgets.json
+            - [ ] Tested uninstall preserves other widgets
+            - [ ] Verified generated files have no hardcoded paths
 
-            Provide a concise code review with:
-            1. **Summary**: What this PR does (1-2 sentences)
-            2. **Strengths**: What's good about this change
-            3. **Issues**: Any bugs, security concerns, or problems (be specific with line references)
-            4. **Suggestions**: Improvements to consider
-
-            Keep the review focused and actionable. Use GitHub markdown formatting.`;
-
-            const requestBody = JSON.stringify({
-              model: 'claude-sonnet-4-20250514',
-              max_tokens: 2048,
-              messages: [{ role: 'user', content: prompt }]
-            });
-
-            const response = await new Promise((resolve, reject) => {
-              const req = https.request({
-                hostname: 'api.anthropic.com',
-                path: '/v1/messages',
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-api-key': process.env.ANTHROPIC_API_KEY,
-                  'anthropic-version': '2023-06-01'
-                }
-              }, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                  if (res.statusCode === 200) {
-                    resolve(JSON.parse(data));
-                  } else {
-                    reject(new Error(`API error: ${res.statusCode} - ${data}`));
-                  }
-                });
-              });
-              req.on('error', reject);
-              req.write(requestBody);
-              req.end();
-            });
-
-            const reviewBody = `## AI Code Review
-
-            ${response.content[0].text}
+            ### Documentation
+            - [ ] README updated if needed
+            - [ ] .agents.md updated if functions changed
 
             ---
-            *Automated review by Claude. Please verify suggestions before applying.*`;
+            *GitHub Copilot has been requested to review this PR.*
+            `;
 
-            await github.rest.pulls.createReview({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-              body: reviewBody,
-              event: 'COMMENT'
+              issue_number: context.payload.pull_request.number,
+              body: checklist
             });
-
-            console.log('AI review posted successfully');
