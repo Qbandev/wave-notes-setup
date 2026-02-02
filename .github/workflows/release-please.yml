@@ -140,24 +140,28 @@ jobs:
               return;
             }
 
+            const issueBody = [
+              `A new release ${version} has been published.`,
+              '',
+              '## Action Required',
+              '',
+              'Update the Homebrew formula with the new SHA256 from the release notes.',
+              '',
+              `1. Go to [Releases](https://github.com/${context.repo.owner}/${context.repo.repo}/releases/tag/${version})`,
+              '2. Copy the SHA256 value',
+              '3. Update `Formula/wave-notes-setup.rb`:',
+              `   - Update the \`url\` to point to ${version}`,
+              '   - Update the `sha256` value',
+              '4. Commit and push the changes',
+              '5. Close this issue',
+              '',
+              'This issue was automatically created by the release workflow.'
+            ].join('\n');
+
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `Update Homebrew formula for ${version}`,
-              body: `A new release ${version} has been published.
-
-## Action Required
-
-Update the Homebrew formula with the new SHA256 from the release notes.
-
-1. Go to [Releases](https://github.com/${context.repo.owner}/${context.repo.repo}/releases/tag/${version})
-2. Copy the SHA256 value
-3. Update \`Formula/wave-notes-setup.rb\`:
-   - Update the \`url\` to point to ${version}
-   - Update the \`sha256\` value
-4. Commit and push the changes
-5. Close this issue
-
-This issue was automatically created by the release workflow.`,
+              body: issueBody,
               labels: ['homebrew', 'release']
             });
