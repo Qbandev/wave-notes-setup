@@ -154,7 +154,7 @@ check_wave_installed() {
         return 0
     elif [[ -d "$HOME/.waveterm" ]]; then
         return 0
-    elif command -v wsh &>/dev/null; then
+    elif command -v wsh >/dev/null 2>&1; then
         return 0
     else
         print_error "Wave Terminal is not installed"
@@ -183,10 +183,10 @@ check_jq() {
 
 validate_widgets() {
     local widgets_file="$1"
-    if command -v jq &>/dev/null; then
+    if command -v jq >/dev/null 2>&1; then
         jq empty "$widgets_file" 2>/dev/null
         return $?
-    elif command -v python3 &>/dev/null; then
+    elif command -v python3 >/dev/null 2>&1; then
         python3 -c "import sys, json; json.load(open(sys.argv[1]))" "$widgets_file" 2>/dev/null
         return $?
     fi
@@ -625,7 +625,6 @@ main() {
 
     # Preflight checks
     check_macos
-    check_wave_installed || exit 1
     check_wave_terminal
     check_wsh
 
