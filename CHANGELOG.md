@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/Qbandev/wave-notes-setup/compare/v1.0.0...v1.0.1) (2026-02-02)
+
+
+### Bug Fixes
+
+* **ci:** add issues write permission for Homebrew reminder ([3d4e838](https://github.com/Qbandev/wave-notes-setup/commit/3d4e83849eb170111045b68113f3ff1b4ea65a8a))
+
 ## 1.0.0 (2026-02-02)
 
 
