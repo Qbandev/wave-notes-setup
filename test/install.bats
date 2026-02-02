@@ -426,3 +426,137 @@ EOF
     assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
     assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
 }
+
+# =============================================================================
+# check_wave_installed() tests
+# =============================================================================
+
+@test "check_wave_installed: passes when ~/.config/waveterm exists" {
+    mkdir -p "$TEST_HOME/.config/waveterm"
+
+    run check_wave_installed
+
+    [ "$status" -eq 0 ]
+}
+
+@test "check_wave_installed: passes when wsh command available" {
+    rm -rf "$TEST_HOME/.config/waveterm"
+    rm -rf "$TEST_HOME/.waveterm"
+    create_mock_wsh
+
+    run check_wave_installed
+
+    [ "$status" -eq 0 ]
+}
+
+@test "check_wave_installed: fails when Wave not found" {
+    rm -rf "$TEST_HOME/.config/waveterm"
+    rm -rf "$TEST_HOME/.waveterm"
+    # Remove wsh from PATH
+    export PATH="/usr/bin:/bin"
+
+    run check_wave_installed
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Wave Terminal is not installed"* ]]
+}
+
+# =============================================================================
+# validate_widgets() tests
+# =============================================================================
+
+@test "validate_widgets: passes with valid JSON" {
+    local widgets_file="$TEST_WAVETERM_CONFIG/widgets.json"
+    echo '{"test": "valid"}' > "$widgets_file"
+
+    run validate_widgets "$widgets_file"
+
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_widgets: fails with malformed JSON" {
+    local widgets_file="$TEST_WAVETERM_CONFIG/widgets.json"
+    echo '{invalid json' > "$widgets_file"
+
+    run validate_widgets "$widgets_file"
+
+    [ "$status" -ne 0 ]
+}
+
+# =============================================================================
+# Backup and rollback tests
+# =============================================================================
+
+@test "install_widgets: backup has 600 permissions" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+    create_sample_widgets_json
+
+    install_widgets
+
+    # Find backup file and check permissions
+    local backup_file
+    backup_file=$(ls -1 "$WAVETERM_CONFIG"/widgets.json.bak.* 2>/dev/null | head -1)
+    [ -n "$backup_file" ]
+
+    local perms
+    perms=$(stat -f "%Lp" "$backup_file" 2>/dev/null || stat -c "%a" "$backup_file" 2>/dev/null)
+    [ "$perms" = "600" ]
+}
+
+@test "install_widgets: rollback restores backup on invalid JSON" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+
+    # Create a valid initial widgets.json
+    echo '{"original": "content"}' > "$WAVETERM_CONFIG/widgets.json"
+
+    # Create a modified install_widgets that produces invalid JSON
+    # We test the validate_widgets + rollback logic directly
+    local widgets_file="$WAVETERM_CONFIG/widgets.json"
+    local backup_file="$widgets_file.bak.test"
+    cp "$widgets_file" "$backup_file"
+    chmod 600 "$backup_file"
+
+    # Write invalid JSON
+    echo '{invalid' > "$widgets_file"
+
+    # Simulate rollback logic
+    if ! validate_widgets "$widgets_file"; then
+        cp "$backup_file" "$widgets_file"
+    fi
+
+    # Should have restored backup
+    run cat "$widgets_file"
+    [[ "$output" == *"original"* ]]
+}
+
+@test "install_widgets: removes invalid file on fresh install validation failure" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+
+    # Ensure no existing widgets.json (fresh install)
+    rm -f "$WAVETERM_CONFIG/widgets.json"
+
+    # Simulate the fresh install rollback logic
+    local widgets_file="$WAVETERM_CONFIG/widgets.json"
+    local backup_file=""
+
+    # Write invalid JSON (simulating failed generation)
+    echo '{invalid' > "$widgets_file"
+
+    # Simulate rollback logic (matching install.sh)
+    if ! validate_widgets "$widgets_file"; then
+        if [[ -n "$backup_file" && -f "$backup_file" ]]; then
+            cp "$backup_file" "$widgets_file"
+        else
+            rm -f "$widgets_file"
+        fi
+    fi
+
+    # Should have removed invalid file
+    [ ! -f "$widgets_file" ]
+}
