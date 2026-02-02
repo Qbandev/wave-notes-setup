@@ -22,7 +22,6 @@ jobs:
         id: release
         with:
           release-type: simple
-          package-name: wave-notes-setup
 
   # Run tests and create GitHub release with install instructions
   publish-release:
