@@ -1,0 +1,163 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          release-type: simple
+          package-name: wave-notes-setup
+
+  # Run tests and create GitHub release with install instructions
+  publish-release:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install test tools
+        run: brew install bats-core shellcheck
+
+      - name: Run ShellCheck
+        run: shellcheck install.sh uninstall.sh
+
+      - name: Run tests
+        run: bats test/*.bats
+
+      - name: Calculate SHA256
+        id: sha256
+        run: |
+          VERSION="${{ needs.release-please.outputs.tag_name }}"
+          TARBALL_URL="https://github.com/${{ github.repository }}/archive/${VERSION}.tar.gz"
+          curl -sL "$TARBALL_URL" -o release.tar.gz
+          SHA256=$(shasum -a 256 release.tar.gz | cut -d' ' -f1)
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Update release notes
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ needs.release-please.outputs.tag_name }}
+          SHA256: ${{ steps.sha256.outputs.sha256 }}
+        with:
+          script: |
+            const { VERSION, SHA256 } = process.env;
+
+            // Get the existing release
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: VERSION
+            });
+
+            // Append installation instructions
+            const installInstructions = `
+
+            ## Installation
+
+            ### Homebrew (Recommended)
+            \`\`\`bash
+            brew tap qbandev/wave-notes-setup
+            brew install wave-notes-setup
+            wave-notes-setup
+            \`\`\`
+
+            ### curl
+            \`\`\`bash
+            curl -fsSL https://raw.githubusercontent.com/qbandev/wave-notes-setup/${VERSION}/install.sh | bash
+            \`\`\`
+
+            ### Manual
+            \`\`\`bash
+            git clone https://github.com/qbandev/wave-notes-setup.git
+            cd wave-notes-setup
+            git checkout ${VERSION}
+            ./install.sh
+            \`\`\`
+
+            ## Homebrew Formula Update
+
+            Update \`Formula/wave-notes-setup.rb\`:
+            \`\`\`ruby
+            url "https://github.com/qbandev/wave-notes-setup/archive/${VERSION}.tar.gz"
+            sha256 "${SHA256}"
+            \`\`\`
+            `;
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              body: release.body + installInstructions
+            });
+
+            console.log(`Release ${VERSION} updated with install instructions`);
+            console.log(`SHA256 for Homebrew: ${SHA256}`);
+
+  # Notify about formula update needed
+  notify-homebrew:
+    needs: [release-please, publish-release]
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create issue for Homebrew update
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ needs.release-please.outputs.tag_name }}
+        with:
+          script: |
+            const version = process.env.VERSION;
+
+            // Check if issue already exists
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'homebrew,release'
+            });
+
+            const existingIssue = issues.find(i => i.title.includes(version));
+            if (existingIssue) {
+              console.log('Issue already exists for this version');
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Update Homebrew formula for ${version}`,
+              body: `A new release ${version} has been published.
+
+## Action Required
+
+Update the Homebrew formula with the new SHA256 from the release notes.
+
+1. Go to [Releases](https://github.com/${context.repo.owner}/${context.repo.repo}/releases/tag/${version})
+2. Copy the SHA256 value
+3. Update \`Formula/wave-notes-setup.rb\`:
+   - Update the \`url\` to point to ${version}
+   - Update the \`sha256\` value
+4. Commit and push the changes
+5. Close this issue
+
+This issue was automatically created by the release workflow.`,
+              labels: ['homebrew', 'release']
+            });
