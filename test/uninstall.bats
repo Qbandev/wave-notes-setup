@@ -246,3 +246,27 @@ EOF
     [ -d "$NOTES_DIR" ]
     [ -f "$NOTES_DIR/note.md" ]
 }
+
+# =============================================================================
+# Security tests
+# =============================================================================
+
+@test "security: safe_rmdir rejects protected directories including Downloads" {
+    mkdir -p "$TEST_HOME/Desktop"
+    mkdir -p "$TEST_HOME/Documents"
+    mkdir -p "$TEST_HOME/Downloads"
+
+    run safe_rmdir "$TEST_HOME/Desktop"
+    [ "$status" -ne 0 ]
+
+    run safe_rmdir "$TEST_HOME/Documents"
+    [ "$status" -ne 0 ]
+
+    run safe_rmdir "$TEST_HOME/Downloads"
+    [ "$status" -ne 0 ]
+
+    # Verify directories still exist
+    [ -d "$TEST_HOME/Desktop" ]
+    [ -d "$TEST_HOME/Documents" ]
+    [ -d "$TEST_HOME/Downloads" ]
+}

@@ -82,11 +82,12 @@ validate_safe_path() {
             print_error "Security: Refusing to operate on system path: $resolved_path"
             return 1
             ;;
-        "$HOME"|"$HOME/"|"$HOME/Documents"|"$HOME/Documents/"|"$HOME/Desktop"|"$HOME/Desktop/"|"$HOME/Library"|"$HOME/Library/"*)
+        "$HOME"|"$HOME/"|"$HOME/Documents"|"$HOME/Documents/"|"$HOME/Desktop"|"$HOME/Desktop/"|"$HOME/Downloads"|"$HOME/Downloads/"|"$HOME/Library"|"$HOME/Library/"*)
             # Allow subdirectories of Documents but not Documents itself
             if [[ "$resolved_path" == "$HOME" || "$resolved_path" == "$HOME/" || \
                   "$resolved_path" == "$HOME/Documents" || "$resolved_path" == "$HOME/Documents/" || \
-                  "$resolved_path" == "$HOME/Desktop" || "$resolved_path" == "$HOME/Desktop/" ]]; then
+                  "$resolved_path" == "$HOME/Desktop" || "$resolved_path" == "$HOME/Desktop/" || \
+                  "$resolved_path" == "$HOME/Downloads" || "$resolved_path" == "$HOME/Downloads/" ]]; then
                 print_error "Security: Refusing to delete protected directory: $resolved_path"
                 return 1
             fi
