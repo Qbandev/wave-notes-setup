@@ -373,7 +373,7 @@ install_widgets() {
                 has_legacy_notes_list=true
             fi
         else
-            if python3 -c "import json; data=json.load(open('$widgets_file')); exit(0 if 'custom:notes-list' in data else 1)" 2>/dev/null; then
+            if python3 -c "import json, sys; data=json.load(open('$widgets_file')); sys.exit(0 if 'custom:notes-list' in data else 1)" 2>/dev/null; then
                 has_legacy_notes_list=true
             fi
         fi
@@ -414,7 +414,8 @@ WIDGETS_EOF
         if command -v jq >/dev/null 2>&1; then
             jq -s '(.[0] | del(."custom:notes-list")) * .[1]' "$widgets_file" <(echo "$new_widgets") > "$temp_file"
         else
-            python3 -c "
+            # Pass new_widgets via stdin to avoid command injection
+            echo "$new_widgets" | python3 -c "
 import json
 import sys
 
@@ -425,8 +426,8 @@ with open('$widgets_file', 'r') as f:
 # Remove deprecated custom:notes-list widget if present
 existing.pop('custom:notes-list', None)
 
-# Parse new widgets
-new_widgets = json.loads('''$new_widgets''')
+# Parse new widgets from stdin (safer than embedding in code)
+new_widgets = json.load(sys.stdin)
 
 # Merge (new overwrites existing keys)
 existing.update(new_widgets)
