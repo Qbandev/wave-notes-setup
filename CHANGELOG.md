@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.0](https://github.com/Qbandev/wave-notes-setup/compare/v1.0.1...v2.0.0) (2026-02-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* The installer now only creates a single "note" widget. The "All Notes" directory browser widget (custom:notes-list) has been removed.
+
+### Features
+
+* remove "All Notes" widget, rename to single "note" widget ([c0ed10d](https://github.com/Qbandev/wave-notes-setup/commit/c0ed10de94cac8e82e2aceef41543ce8e5dc0e34))
+
+
+### Bug Fixes
+
+* address Copilot review feedback ([b3d468b](https://github.com/Qbandev/wave-notes-setup/commit/b3d468b0da475598d300885c97aef698b9348b39))
+* consistent info message format and test assertion ([ef960d1](https://github.com/Qbandev/wave-notes-setup/commit/ef960d13e1c5f64d24840bb91c4959312854c644))
+
 ## [1.0.1](https://github.com/Qbandev/wave-notes-setup/compare/v1.0.0...v1.0.1) (2026-02-02)
 
 
