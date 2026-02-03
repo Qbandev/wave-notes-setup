@@ -53,6 +53,72 @@ print_error() {
     echo -e "${RED}[✗] Error:${NC} $1" >&2
 }
 
+# ============================================================================
+# Security Functions
+# ============================================================================
+
+# Check that a path is not a symlink (prevents symlink attacks)
+check_not_symlink() {
+    local path="$1"
+    if [[ -L "$path" ]]; then
+        print_error "Security: $path is a symlink, aborting"
+        print_error "This could be a security attack. Please remove the symlink manually."
+        return 1
+    fi
+    return 0
+}
+
+# Validate path is safe for deletion (not a system directory)
+validate_safe_path() {
+    local path="$1"
+    local resolved_path
+
+    # Resolve to absolute path
+    resolved_path=$(cd "$(dirname "$path")" 2>/dev/null && pwd)/$(basename "$path")
+
+    # Block dangerous paths
+    case "$resolved_path" in
+        /|/bin|/sbin|/usr|/usr/*|/etc|/etc/*|/var|/var/*|/tmp|/private|/private/*|/System|/System/*|/Library|/Library/*|/Applications|/Applications/*)
+            print_error "Security: Refusing to operate on system path: $resolved_path"
+            return 1
+            ;;
+        "$HOME"|"$HOME/"|"$HOME/Documents"|"$HOME/Documents/"|"$HOME/Desktop"|"$HOME/Desktop/"|"$HOME/Library"|"$HOME/Library/"*)
+            # Allow subdirectories of Documents but not Documents itself
+            if [[ "$resolved_path" == "$HOME" || "$resolved_path" == "$HOME/" || \
+                  "$resolved_path" == "$HOME/Documents" || "$resolved_path" == "$HOME/Documents/" || \
+                  "$resolved_path" == "$HOME/Desktop" || "$resolved_path" == "$HOME/Desktop/" ]]; then
+                print_error "Security: Refusing to delete protected directory: $resolved_path"
+                return 1
+            fi
+            # Block anything in ~/Library
+            if [[ "$resolved_path" == "$HOME/Library"* ]]; then
+                print_error "Security: Refusing to delete Library path: $resolved_path"
+                return 1
+            fi
+            ;;
+    esac
+
+    return 0
+}
+
+# Safe directory removal with validation
+safe_rmdir() {
+    local path="$1"
+
+    if [[ ! -d "$path" ]]; then
+        return 0
+    fi
+
+    if ! validate_safe_path "$path"; then
+        return 1
+    fi
+
+    check_not_symlink "$path" || return 1
+
+    rm -rf "$path"
+    return $?
+}
+
 load_config() {
     NOTES_DIR="$DEFAULT_NOTES_DIR"
     BIN_DIR="$DEFAULT_BIN_DIR"
@@ -62,8 +128,16 @@ load_config() {
         while IFS='=' read -r key value; do
             [[ "$key" =~ ^#.*$ ]] && continue
             [[ -z "$key" ]] && continue
-            key=$(echo "$key" | xargs)
-            value=$(echo "$value" | xargs | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+            # Trim whitespace using parameter expansion (avoids xargs)
+            key="${key#"${key%%[![:space:]]*}"}"
+            key="${key%"${key##*[![:space:]]}"}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            # Remove surrounding quotes
+            value="${value#\"}"
+            value="${value%\"}"
+            value="${value#\'}"
+            value="${value%\'}"
             value="${value//\$HOME/$HOME}"
             case "$key" in
                 NOTES_DIR) NOTES_DIR="$value" ;;
@@ -93,16 +167,24 @@ remove_widgets() {
     if command -v jq >/dev/null 2>&1; then
         jq 'with_entries(select(.key | startswith("custom:notes-") | not))' "$widgets_file" > "$temp_file"
     else
+        # Pass paths via sys.argv to prevent command injection
         python3 -c "
 import json
-with open('$widgets_file', 'r') as f:
+import sys
+
+widgets_file = sys.argv[1]
+temp_file = sys.argv[2]
+
+with open(widgets_file, 'r') as f:
     data = json.load(f)
 filtered = {k: v for k, v in data.items() if not k.startswith('custom:notes-')}
-with open('$temp_file', 'w') as f:
+with open(temp_file, 'w') as f:
     json.dump(filtered, f, indent=2)
-"
+" "$widgets_file" "$temp_file"
     fi
 
+    # Check destination is not a symlink before writing
+    check_not_symlink "$widgets_file" || { rm -f "$temp_file"; return 1; }
     mv "$temp_file" "$widgets_file"
     print_success "Removed widgets from widgets.json"
 }
@@ -132,8 +214,11 @@ prompt_notes_deletion() {
     read -p "Delete notes folder $NOTES_DIR? This will delete all your notes! (y/N) " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf "$NOTES_DIR"
-        print_success "Deleted $NOTES_DIR"
+        if safe_rmdir "$NOTES_DIR"; then
+            print_success "Deleted $NOTES_DIR"
+        else
+            print_error "Failed to delete $NOTES_DIR (safety check failed)"
+        fi
     else
         echo "Keeping notes folder at $NOTES_DIR"
     fi

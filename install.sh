@@ -76,6 +76,67 @@ print_verbose() {
     fi
 }
 
+check_not_symlink() {
+    local path="$1"
+    if [[ -L "$path" ]]; then
+        print_error "Refusing to overwrite symlink: $path"
+        print_error "This could be a security attack. Please remove the symlink manually."
+        return 1
+    fi
+    return 0
+}
+
+# ============================================================================
+# Security Functions
+# ============================================================================
+
+# F3: Path Traversal - Validate paths are within $HOME
+validate_safe_path() {
+    local path="$1"
+    local name="$2"
+
+    # Reject paths with .. sequences (before directory may exist)
+    if [[ "$path" == *".."* ]]; then
+        print_error "$name cannot contain '..' sequences: $path"
+        return 1
+    fi
+
+    # Resolve to absolute path
+    local resolved
+    resolved=$(cd "$(dirname "$path")" 2>/dev/null && pwd)/$(basename "$path") || resolved="$path"
+
+    # Must be under $HOME
+    if [[ "$resolved" != "$HOME"/* && "$resolved" != "$HOME" ]]; then
+        print_error "$name must be under \$HOME: $path"
+        return 1
+    fi
+
+    # Blacklist critical paths
+    case "$resolved" in
+        "$HOME"|"$HOME/"|"$HOME/Desktop"|"$HOME/Documents"|"$HOME/Downloads"|"$HOME/Library")
+            print_error "$name cannot be a protected directory: $path"
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+# F4: Safe deletion function with protected path checks
+safe_rmdir() {
+    local path="$1"
+
+    # Never delete root or home
+    case "$(realpath "$path" 2>/dev/null || echo "$path")" in
+        /|/etc|/usr|/var|/bin|/sbin|/home|/root|"$HOME")
+            print_error "Refusing to delete protected path: $path"
+            return 1
+            ;;
+    esac
+
+    rm -rf "$path"
+}
+
 # ============================================================================
 # Configuration Resolution
 # ============================================================================
@@ -101,9 +162,14 @@ load_config() {
             # Skip comments and empty lines
             [[ "$key" =~ ^#.*$ ]] && continue
             [[ -z "$key" ]] && continue
-            # Remove leading/trailing whitespace and quotes
-            key=$(echo "$key" | xargs)
-            value=$(echo "$value" | xargs | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+            # F5: Trim whitespace using parameter expansion (safer than xargs)
+            key="${key#"${key%%[![:space:]]*}"}"
+            key="${key%"${key##*[![:space:]]}"}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            # Handle quotes
+            value="${value#\"}" ; value="${value%\"}"
+            value="${value#\'}" ; value="${value%\'}"
             # Expand $HOME in value
             value="${value//\$HOME/$HOME}"
             case "$key" in
@@ -216,6 +282,9 @@ create_directories() {
 install_scratchpad_script() {
     local script_path="$BIN_DIR/wave-scratch.sh"
 
+    # Security check: refuse to overwrite symlinks
+    check_not_symlink "$script_path" || return 1
+
     # Generate the script with injected paths
     cat > "$script_path" << 'SCRIPT_EOF'
 #!/bin/bash
@@ -281,17 +350,19 @@ get_max_display_order() {
             max_order=$(jq '[.[] | ."display:order" // 0] | max // 0' "$widgets_file" 2>/dev/null || echo 0)
         else
             # Python fallback: output format is "value|error" (error empty on success)
+            # Pass file path via sys.argv to prevent command injection
             local python_output
             python_output=$(python3 -c "
 import json
+import sys
 try:
-    with open('$widgets_file', 'r') as f:
+    with open(sys.argv[1], 'r') as f:
         data = json.load(f)
     orders = [v.get('display:order', 0) for v in data.values() if isinstance(v, dict)]
     print(str(max(orders) if orders else 0) + '|')
 except Exception as e:
     print('0|' + str(e))
-" 2>/dev/null || echo "0|python execution failed")
+" "$widgets_file" 2>/dev/null || echo "0|python execution failed")
             max_order="${python_output%%|*}"
             local python_err="${python_output#*|}"
             if [[ -n "$python_err" ]]; then
@@ -318,16 +389,21 @@ get_existing_order() {
         order=$(jq -r ".[\"$key\"][\"display:order\"] // \"$default\"" "$widgets_file" 2>/dev/null || echo "$default")
     else
         # Python fallback: output format is "value|error" (error empty on success)
+        # Pass file path and parameters via sys.argv to prevent command injection
         local python_output
         python_output=$(python3 -c "
 import json
+import sys
+widgets_file = sys.argv[1]
+key = sys.argv[2]
+default = sys.argv[3]
 try:
-    with open('$widgets_file', 'r') as f:
+    with open(widgets_file, 'r') as f:
         data = json.load(f)
-    print(str(data.get('$key', {}).get('display:order', '$default')) + '|')
+    print(str(data.get(key, {}).get('display:order', default)) + '|')
 except Exception as e:
-    print('$default|' + str(e))
-" 2>/dev/null || echo "$default|python execution failed")
+    print(default + '|' + str(e))
+" "$widgets_file" "$key" "$default" 2>/dev/null || echo "$default|python execution failed")
         order="${python_output%%|*}"
         local python_err="${python_output#*|}"
         if [[ -n "$python_err" ]]; then
@@ -373,7 +449,8 @@ install_widgets() {
                 has_legacy_notes_list=true
             fi
         else
-            if python3 -c "import json, sys; data=json.load(open('$widgets_file')); sys.exit(0 if 'custom:notes-list' in data else 1)" 2>/dev/null; then
+            # Pass file path via sys.argv to prevent command injection
+            if python3 -c "import json, sys; data=json.load(open(sys.argv[1])); sys.exit(0 if 'custom:notes-list' in data else 1)" "$widgets_file" 2>/dev/null; then
                 has_legacy_notes_list=true
             fi
         fi
@@ -414,13 +491,17 @@ WIDGETS_EOF
         if command -v jq >/dev/null 2>&1; then
             jq -s '(.[0] | del(."custom:notes-list")) * .[1]' "$widgets_file" <(echo "$new_widgets") > "$temp_file"
         else
-            # Pass new_widgets via stdin to avoid command injection
+            # Pass file paths via sys.argv to prevent command injection
+            # Pass new_widgets via stdin to avoid embedding in code
             echo "$new_widgets" | python3 -c "
 import json
 import sys
 
+widgets_file = sys.argv[1]
+temp_file = sys.argv[2]
+
 # Read existing widgets
-with open('$widgets_file', 'r') as f:
+with open(widgets_file, 'r') as f:
     existing = json.load(f)
 
 # Remove deprecated custom:notes-list widget if present
@@ -433,13 +514,16 @@ new_widgets = json.load(sys.stdin)
 existing.update(new_widgets)
 
 # Write result
-with open('$temp_file', 'w') as f:
+with open(temp_file, 'w') as f:
     json.dump(existing, f, indent=2)
-"
+" "$widgets_file" "$temp_file"
         fi
     else
         echo "$new_widgets" > "$temp_file"
     fi
+
+    # Security check: refuse to overwrite symlinks
+    check_not_symlink "$widgets_file" || return 1
 
     # Atomic write
     mv "$temp_file" "$widgets_file"
@@ -501,14 +585,20 @@ run_uninstall() {
         if command -v jq >/dev/null 2>&1; then
             jq 'with_entries(select(.key | startswith("custom:notes-") | not))' "$widgets_file" > "$temp_file"
         else
+            # Pass file paths via sys.argv to prevent command injection
             python3 -c "
 import json
-with open('$widgets_file', 'r') as f:
+import sys
+
+widgets_file = sys.argv[1]
+temp_file = sys.argv[2]
+
+with open(widgets_file, 'r') as f:
     data = json.load(f)
 filtered = {k: v for k, v in data.items() if not k.startswith('custom:notes-')}
-with open('$temp_file', 'w') as f:
+with open(temp_file, 'w') as f:
     json.dump(filtered, f, indent=2)
-"
+" "$widgets_file" "$temp_file"
         fi
 
         mv "$temp_file" "$widgets_file"
@@ -531,8 +621,10 @@ with open('$temp_file', 'w') as f:
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         if [[ -d "$NOTES_DIR" ]]; then
-            rm -rf "$NOTES_DIR"
-            print_success "Deleted $NOTES_DIR"
+            # F4: Use safe deletion with protected path checks
+            if safe_rmdir "$NOTES_DIR"; then
+                print_success "Deleted $NOTES_DIR"
+            fi
         fi
     else
         echo "Keeping notes folder."
@@ -626,6 +718,10 @@ parse_args() {
 main() {
     parse_args "$@"
     load_config
+
+    # F3: Validate paths are safe before proceeding
+    validate_safe_path "$NOTES_DIR" "NOTES_DIR" || exit 1
+    validate_safe_path "$BIN_DIR" "BIN_DIR" || exit 1
 
     if [[ "$UNINSTALL" == true ]]; then
         run_uninstall
