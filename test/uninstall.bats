@@ -209,7 +209,7 @@ EOF
     cat > "$WAVETERM_CONFIG/widgets.json" << EOF
 {
   "existing:widget": { "display:order": 1 },
-  "custom:notes-new": { "display:order": 2, "label": "New Note" },
+  "custom:notes-new": { "display:order": 2, "label": "note" },
   "custom:notes-list": { "display:order": 3, "label": "All Notes" }
 }
 EOF

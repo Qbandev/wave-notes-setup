@@ -158,8 +158,7 @@ Both are tested to ensure consistent behavior.
 
 | Widget | View Type | Purpose |
 |--------|-----------|---------|
-| New Note | `term` | Runs script to create note |
-| All Notes | `preview` | Native directory browser |
+| note | `term` | Runs script to create note |
 
 The `term` view requires special handling:
 - `cmd:closeonexit: true` - Close terminal on success
