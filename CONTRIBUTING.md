@@ -61,6 +61,15 @@ Thank you for your interest in contributing to wave-notes-setup!
 - Always include `cmd:closeonexit: true` and `cmd:closeonexitdelay: 0` for term widgets
 - Use `view: "preview"` for file/directory browsing, not `view: "term"` with commands
 
+#### Security
+
+- **Always use security functions** for file operations:
+  - `check_not_symlink()` - Call before writing to any file
+  - `validate_safe_path()` - Call for user-configurable paths
+  - `safe_rmdir()` - Call instead of direct `rm -rf`
+- **Never embed paths in Python code** - pass via `sys.argv` or stdin
+- **Never use `xargs`** for whitespace trimming - use bash parameter expansion
+
 #### Testing
 
 - Write tests for new functionality
