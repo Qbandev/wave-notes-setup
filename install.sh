@@ -66,6 +66,10 @@ print_error() {
     echo -e "${RED}[✗] Error:${NC} $1" >&2
 }
 
+print_info() {
+    echo -e "${BLUE}[ℹ]${NC} $1"
+}
+
 print_verbose() {
     if [[ "$VERBOSE" == true ]]; then
         echo -e "${BLUE}[DEBUG]${NC} $1"
@@ -376,7 +380,7 @@ install_widgets() {
     fi
 
     if [[ "$has_legacy_notes_list" == true ]]; then
-        echo "[INFO] Removing deprecated 'All Notes' widget..."
+        print_info "Removing deprecated 'All Notes' widget..."
     fi
 
     # Create new widgets JSON (no color property - follows theme)

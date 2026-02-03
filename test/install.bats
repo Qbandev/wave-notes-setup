@@ -375,8 +375,11 @@ EOF
 }
 EOF
 
-    # Action: Run install_widgets
-    install_widgets
+    # Action: Run install_widgets and capture output
+    run install_widgets
+
+    # Assert: deprecation notice was printed
+    [[ "$output" == *"Removing deprecated"* ]]
 
     # Assert: custom:notes-list is absent, custom:notes-new is present, backup exists
     assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
