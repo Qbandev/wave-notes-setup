@@ -4,12 +4,11 @@ One-command setup for a Warp-like notes system in [Wave Terminal](https://www.wa
 
 ## What You Get
 
-After running the installer, you'll have two new sidebar widgets in Wave Terminal:
+After running the installer, you'll have a new sidebar widget in Wave Terminal:
 
 | Widget | Description |
 |--------|-------------|
-| **New Note** | Creates a timestamped markdown note and opens it in Wave's editor |
-| **All Notes** | Directory browser showing all your notes |
+| **note** | Creates a timestamped markdown note and opens it in Wave's editor |
 <img width="1122" height="984" alt="image" src="https://github.com/user-attachments/assets/c9b15a6c-741e-457c-8ffb-3163c567a1dc" />
 
 ## Installation
@@ -109,7 +108,7 @@ ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/WaveNotes ~/Documents/Wave
 The installer:
 1. Creates a notes directory (`~/Documents/WaveNotes`)
 2. Installs a scratchpad script (`~/bin/wave-scratch.sh`)
-3. Adds 2 custom widgets to Wave's `~/.config/waveterm/widgets.json`
+3. Adds a custom widget to Wave's `~/.config/waveterm/widgets.json`
 
 All modifications are reversible with the uninstaller.
 

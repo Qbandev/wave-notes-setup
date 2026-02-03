@@ -307,7 +307,6 @@ EOF
 
     [ -f "$WAVETERM_CONFIG/widgets.json" ]
     assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
-    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
 }
 
 @test "install_widgets: merges with existing widgets" {
@@ -320,7 +319,6 @@ EOF
 
     assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "existing:widget"
     assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
-    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
 }
 
 @test "install_widgets: creates backup of existing widgets.json" {
@@ -358,14 +356,40 @@ EOF
     assert_file_contains "$WAVETERM_CONFIG/widgets.json" '"cmd:closeonexitdelay": 0'
 }
 
-@test "install_widgets: uses preview view for notes list" {
+@test "install_widgets: removes legacy list widget on upgrade" {
     NOTES_DIR="$TEST_HOME/TestNotes"
     BIN_DIR="$TEST_HOME/TestBin"
     WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
 
-    install_widgets
+    # Setup: Create widgets.json with legacy custom:notes-list
+    cat > "$WAVETERM_CONFIG/widgets.json" << 'EOF'
+{
+  "custom:notes-list": {
+    "icon": "file-text",
+    "label": "All Notes",
+    "display:order": 5
+  },
+  "existing:widget": {
+    "display:order": 1
+  }
+}
+EOF
 
-    assert_file_contains "$WAVETERM_CONFIG/widgets.json" '"view": "preview"'
+    # Action: Run install_widgets and capture output
+    run install_widgets
+
+    # Assert: deprecation notice was printed
+    [[ "$output" == *"Removing deprecated"* ]]
+
+    # Assert: custom:notes-list is absent, custom:notes-new is present, backup exists
+    assert_json_not_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
+    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
+    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "existing:widget"
+
+    # Verify backup was created
+    local backup_count
+    backup_count=$(ls -1 "$WAVETERM_CONFIG"/widgets.json.bak.* 2>/dev/null | wc -l)
+    [ "$backup_count" -ge 1 ]
 }
 
 # =============================================================================
@@ -404,7 +428,6 @@ EOF
 
     # Verify widgets.json content
     assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
-    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
 }
 
 @test "integration: install is idempotent" {
@@ -424,7 +447,6 @@ EOF
     # Should still work and have correct structure
     [ -f "$WAVETERM_CONFIG/widgets.json" ]
     assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-new"
-    assert_json_has_key "$WAVETERM_CONFIG/widgets.json" "custom:notes-list"
 }
 
 # =============================================================================

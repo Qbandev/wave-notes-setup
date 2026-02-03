@@ -66,6 +66,10 @@ print_error() {
     echo -e "${RED}[✗] Error:${NC} $1" >&2
 }
 
+print_info() {
+    echo -e "${BLUE}[ℹ]${NC} $1"
+}
+
 print_verbose() {
     if [[ "$VERBOSE" == true ]]; then
         echo -e "${BLUE}[DEBUG]${NC} $1"
@@ -355,14 +359,29 @@ install_widgets() {
     local next_order=$((max_order + 1))
 
     # Calculate orders (preserve existing or assign new)
-    local order_new order_list
+    local order_new
 
     order_new=$(get_existing_order "$widgets_file" "custom:notes-new" "$next_order")
-    [[ "$order_new" == "$next_order" ]] && next_order=$((next_order + 1))
 
-    order_list=$(get_existing_order "$widgets_file" "custom:notes-list" "$next_order")
+    print_verbose "Widget order: new=$order_new"
 
-    print_verbose "Widget orders: new=$order_new, list=$order_list"
+    # Check if deprecated custom:notes-list exists for cleanup notification
+    local has_legacy_notes_list=false
+    if [[ -f "$widgets_file" ]]; then
+        if command -v jq >/dev/null 2>&1; then
+            if jq -e '."custom:notes-list"' "$widgets_file" >/dev/null 2>&1; then
+                has_legacy_notes_list=true
+            fi
+        else
+            if python3 -c "import json, sys; data=json.load(open('$widgets_file')); sys.exit(0 if 'custom:notes-list' in data else 1)" 2>/dev/null; then
+                has_legacy_notes_list=true
+            fi
+        fi
+    fi
+
+    if [[ "$has_legacy_notes_list" == true ]]; then
+        print_info "Removing deprecated 'All Notes' widget..."
+    fi
 
     # Create new widgets JSON (no color property - follows theme)
     local new_widgets
@@ -371,8 +390,8 @@ install_widgets() {
   "custom:notes-new": {
     "display:order": $order_new,
     "icon": "solid@note-sticky",
-    "label": "New Note",
-    "description": "Create a new timestamped note",
+    "label": "note",
+    "description": "Create a timestamped note",
     "blockdef": {
       "meta": {
         "view": "term",
@@ -385,29 +404,18 @@ install_widgets() {
         "cmd:closeonexitdelay": 0
       }
     }
-  },
-  "custom:notes-list": {
-    "display:order": $order_list,
-    "icon": "solid@list-ul",
-    "label": "All Notes",
-    "description": "Browse all notes",
-    "blockdef": {
-      "meta": {
-        "view": "preview",
-        "file": "$NOTES_DIR"
-      }
-    }
   }
 }
 WIDGETS_EOF
 )
 
-    # Merge with existing widgets
+    # Merge with existing widgets (removing deprecated custom:notes-list if present)
     if [[ -f "$widgets_file" ]]; then
         if command -v jq >/dev/null 2>&1; then
-            jq -s '.[0] * .[1]' "$widgets_file" <(echo "$new_widgets") > "$temp_file"
+            jq -s '(.[0] | del(."custom:notes-list")) * .[1]' "$widgets_file" <(echo "$new_widgets") > "$temp_file"
         else
-            python3 -c "
+            # Pass new_widgets via stdin to avoid command injection
+            echo "$new_widgets" | python3 -c "
 import json
 import sys
 
@@ -415,8 +423,11 @@ import sys
 with open('$widgets_file', 'r') as f:
     existing = json.load(f)
 
-# Parse new widgets
-new_widgets = json.loads('''$new_widgets''')
+# Remove deprecated custom:notes-list widget if present
+existing.pop('custom:notes-list', None)
+
+# Parse new widgets from stdin (safer than embedding in code)
+new_widgets = json.load(sys.stdin)
 
 # Merge (new overwrites existing keys)
 existing.update(new_widgets)
@@ -447,7 +458,7 @@ with open('$temp_file', 'w') as f:
         exit 1
     fi
 
-    print_success "Added 2 widgets to widgets.json"
+    print_success "Added widget to widgets.json"
 }
 
 check_path() {
