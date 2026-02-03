@@ -9,7 +9,7 @@ After running the installer, you'll have a new sidebar widget in Wave Terminal:
 | Widget | Description |
 |--------|-------------|
 | **note** | Creates a timestamped markdown note and opens it in Wave's editor |
-<img width="1122" height="984" alt="image" src="https://github.com/user-attachments/assets/c9b15a6c-741e-457c-8ffb-3163c567a1dc" />
+<img width="1727" height="1085" alt="image" src="https://github.com/user-attachments/assets/3b3ccc86-e4e3-4f9e-8ae0-5cbd52d5ce0d" />
 
 ## Installation
 
