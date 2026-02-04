@@ -362,8 +362,8 @@ else
 fi
 SCRIPT_EOF
 
-    # Replace placeholder with actual path (escape for safe shell embedding)
-    # Use printf %q to escape any shell metacharacters
+    # Replace placeholder with actual path
+    # Escape characters that have special meaning in sed replacement strings (&, /, \)
     local escaped_notes_dir
     escaped_notes_dir=$(printf '%s' "$NOTES_DIR" | sed 's/[&/\]/\\&/g')
     sed -i '' "s|NOTES_DIR_PLACEHOLDER|$escaped_notes_dir|g" "$script_path"
