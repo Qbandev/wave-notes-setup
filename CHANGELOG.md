@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.1](https://github.com/Qbandev/wave-notes-setup/compare/v2.0.0...v2.0.1) (2026-02-04)
+
+
+### Bug Fixes
+
+* add default value for validate_safe_path name parameter ([5ace831](https://github.com/Qbandev/wave-notes-setup/commit/5ace8316df02316b040ea788514705593e1eadb0))
+* address code review findings ([626261e](https://github.com/Qbandev/wave-notes-setup/commit/626261e8a97a87cff302c166101f563238ab3797))
+* address remaining Copilot review comments ([a485869](https://github.com/Qbandev/wave-notes-setup/commit/a485869151e0326492c8026f7e0954747889c245))
+* **chore:** update install.sh comment ([18e7421](https://github.com/Qbandev/wave-notes-setup/commit/18e7421780f927f4402b0ad3445340a1426cf46c))
+* **security:** add Downloads to protected directories in uninstall.sh ([68251af](https://github.com/Qbandev/wave-notes-setup/commit/68251af0ac23fde32a6475c21887cad2fe00800a))
+* **security:** address Copilot review feedback ([87812fa](https://github.com/Qbandev/wave-notes-setup/commit/87812fa55a4a353850ee099ccf2302e307cb7ae0))
+* **security:** address vulnerabilities from security audit ([8bf9fe7](https://github.com/Qbandev/wave-notes-setup/commit/8bf9fe70a68a119eaec9deeb8086bd077db52d07))
+* **security:** address vulnerabilities from security audit ([5f1a15f](https://github.com/Qbandev/wave-notes-setup/commit/5f1a15f43c4748afd0b3929ef9547f9c7cb898f4))
+* **security:** block Library subdirectories in install.sh ([2ec048d](https://github.com/Qbandev/wave-notes-setup/commit/2ec048d22f859c3dbc9905c1f2e5705b2fe32914))
+* **security:** reject shell metacharacters in paths ([230e38b](https://github.com/Qbandev/wave-notes-setup/commit/230e38b41b5ff91e080ef8eadf4f4bea6bedce45))
+* **security:** sync security functions and add missing checks ([a52bfaf](https://github.com/Qbandev/wave-notes-setup/commit/a52bfaf8606805d0f8215dcdc62e4023b3b30882))
+
 ## [2.0.0](https://github.com/Qbandev/wave-notes-setup/compare/v1.0.1...v2.0.0) (2026-02-03)
 
 
