@@ -626,6 +626,8 @@ with open(temp_file, 'w') as f:
 " "$widgets_file" "$temp_file"
         fi
 
+        # Security check: refuse to overwrite symlinks
+        check_not_symlink "$widgets_file" || { rm -f "$temp_file"; return 1; }
         mv "$temp_file" "$widgets_file"
         print_success "Removed widgets from widgets.json"
     fi

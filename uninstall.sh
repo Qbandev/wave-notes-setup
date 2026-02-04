@@ -61,7 +61,7 @@ print_error() {
 check_not_symlink() {
     local path="$1"
     if [[ -L "$path" ]]; then
-        print_error "Security: $path is a symlink, aborting"
+        print_error "Refusing to overwrite symlink: $path"
         print_error "This could be a security attack. Please remove the symlink manually."
         return 1
     fi
@@ -69,59 +69,57 @@ check_not_symlink() {
 }
 
 # Validate path is safe for deletion (not a system directory)
+# Synced with install.sh for consistency
 validate_safe_path() {
     local path="$1"
     local name="${2:-PATH}"
-    local resolved_path
+    local resolved
 
     # Reject paths with .. sequences (before directory may exist)
     if [[ "$path" == *".."* ]]; then
-        print_error "Security: $name cannot contain '..' sequences: $path"
+        print_error "$name cannot contain '..' sequences: $path"
         return 1
     fi
 
     # Reject paths with shell metacharacters (prevents command injection)
     # Allow: alphanumeric, /, -, _, ., ~, space (no $, ;, ", ', etc.)
     if [[ "$path" =~ [^a-zA-Z0-9/_~.[:space:]-] ]]; then
-        print_error "Security: $name contains invalid characters: $path"
+        print_error "$name contains invalid characters: $path"
+        print_error "Only alphanumeric characters, /, -, _, ., ~, and spaces are allowed"
         return 1
     fi
 
-    # Resolve to absolute path
-    if ! resolved_path=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$path" 2>/dev/null); then
-        print_error "Security: Unable to resolve $name path: $path"
+    # Resolve to absolute path without requiring parent directory
+    if ! resolved=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$path" 2>/dev/null); then
+        print_error "$name cannot be resolved: $path"
         return 1
     fi
 
     # Must be under $HOME
-    if [[ "$resolved_path" != "$HOME"/* && "$resolved_path" != "$HOME" ]]; then
-        print_error "Security: $name must be under \$HOME: $path"
+    if [[ "$resolved" != "$HOME"/* && "$resolved" != "$HOME" ]]; then
+        print_error "$name must be under \$HOME: $path"
         return 1
     fi
 
-    # Block protected paths in HOME
-    case "$resolved_path" in
-        "$HOME"|"$HOME/"|"$HOME/Documents"|"$HOME/Documents/"|"$HOME/Desktop"|"$HOME/Desktop/"|"$HOME/Downloads"|"$HOME/Downloads/"|"$HOME/Library"|"$HOME/Library/"*)
-            # Allow subdirectories of Documents but not Documents itself
-            if [[ "$resolved_path" == "$HOME" || "$resolved_path" == "$HOME/" || \
-                  "$resolved_path" == "$HOME/Documents" || "$resolved_path" == "$HOME/Documents/" || \
-                  "$resolved_path" == "$HOME/Desktop" || "$resolved_path" == "$HOME/Desktop/" || \
-                  "$resolved_path" == "$HOME/Downloads" || "$resolved_path" == "$HOME/Downloads/" ]]; then
-                print_error "Security: Refusing to delete protected directory: $resolved_path"
-                return 1
-            fi
-            # Block anything in ~/Library
-            if [[ "$resolved_path" == "$HOME/Library"* ]]; then
-                print_error "Security: Refusing to delete Library path: $resolved_path"
-                return 1
-            fi
+    # Blacklist critical paths (with and without trailing slashes)
+    case "$resolved" in
+        "$HOME"|"$HOME/"|"$HOME/Desktop"|"$HOME/Desktop/"|"$HOME/Documents"|"$HOME/Documents/"|"$HOME/Downloads"|"$HOME/Downloads/"|"$HOME/Library"|"$HOME/Library/")
+            print_error "$name cannot be a protected directory: $path"
+            return 1
             ;;
     esac
+
+    # Block anything in ~/Library (Library itself is caught above, this catches subdirs)
+    if [[ "$resolved" == "$HOME/Library/"* ]]; then
+        print_error "$name cannot be in Library: $path"
+        return 1
+    fi
 
     return 0
 }
 
 # Safe directory removal with validation
+# Synced with install.sh for consistency
 safe_rmdir() {
     local path="$1"
 
@@ -129,7 +127,15 @@ safe_rmdir() {
         return 0
     fi
 
-    if ! validate_safe_path "$path"; then
+    # Defense-in-depth: check against hardcoded system paths
+    case "$(realpath "$path" 2>/dev/null || echo "$path")" in
+        /|/etc|/usr|/var|/bin|/sbin|/home|/root|"$HOME")
+            print_error "Refusing to delete protected path: $path"
+            return 1
+            ;;
+    esac
+
+    if ! validate_safe_path "$path" "PATH"; then
         return 1
     fi
 
