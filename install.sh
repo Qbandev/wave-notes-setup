@@ -130,6 +130,12 @@ validate_safe_path() {
             ;;
     esac
 
+    # Block anything in ~/Library (Library itself is caught above, this catches subdirs)
+    if [[ "$resolved" == "$HOME/Library/"* ]]; then
+        print_error "$name cannot be in Library: $path"
+        return 1
+    fi
+
     return 0
 }
 
