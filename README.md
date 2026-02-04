@@ -133,7 +133,7 @@ The project includes a comprehensive test suite using [bats](https://github.com/
 # Install bats
 brew install bats-core
 
-# Run all tests (73 tests)
+# Run all tests (75 tests)
 ./test/run_tests.sh
 
 # Or run bats directly

@@ -632,6 +632,8 @@ EOF
     # Create protected directories in test home
     mkdir -p "$TEST_HOME/Desktop"
     mkdir -p "$TEST_HOME/Documents"
+    mkdir -p "$TEST_HOME/Downloads"
+    mkdir -p "$TEST_HOME/Library"
 
     run validate_safe_path "$TEST_HOME" "TEST_PATH"
     [ "$status" -ne 0 ]
@@ -640,6 +642,22 @@ EOF
     [ "$status" -ne 0 ]
 
     run validate_safe_path "$TEST_HOME/Documents" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Downloads" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Library" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: validate_safe_path rejects Library subdirectories" {
+    # Library subdirectories should also be protected
+    run validate_safe_path "$TEST_HOME/Library/Application Support" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"cannot be in Library"* ]]
+
+    run validate_safe_path "$TEST_HOME/Library/Preferences" "TEST_PATH"
     [ "$status" -ne 0 ]
 }
 
