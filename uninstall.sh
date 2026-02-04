@@ -127,9 +127,9 @@ safe_rmdir() {
         return 0
     fi
 
-    # Defense-in-depth: check against hardcoded system paths
+    # Defense-in-depth: check against hardcoded system and user paths
     case "$(realpath "$path" 2>/dev/null || echo "$path")" in
-        /|/etc|/usr|/var|/bin|/sbin|/home|/root|"$HOME")
+        /|/etc|/usr|/var|/bin|/sbin|/home|/root|"$HOME"|"$HOME/Desktop"|"$HOME/Documents"|"$HOME/Downloads"|"$HOME/Library")
             print_error "Refusing to delete protected path: $path"
             return 1
             ;;
@@ -280,6 +280,10 @@ main() {
     echo ""
 
     load_config
+
+    # Validate paths are safe before proceeding
+    validate_safe_path "$NOTES_DIR" "NOTES_DIR" || exit 1
+    validate_safe_path "$BIN_DIR" "BIN_DIR" || exit 1
 
     # Check if Wave Terminal is installed
     if [[ -z "$WAVETERM_CONFIG" ]]; then

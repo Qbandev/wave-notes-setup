@@ -739,3 +739,37 @@ EOF
     # The file should NOT have been created (command not executed)
     [ ! -f "/tmp/pwned" ]
 }
+
+@test "security: install_widgets refuses to overwrite symlinked widgets.json" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+    mkdir -p "$BIN_DIR"
+
+    # Create symlink where widgets.json would be written
+    local target="$TEST_HOME/real_target.json"
+    echo '{"original": "content"}' > "$target"
+    ln -s "$target" "$WAVETERM_CONFIG/widgets.json"
+
+    run install_widgets
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"symlink"* ]]
+
+    # Original target should be unchanged
+    [[ "$(cat "$target")" == *"original"* ]]
+}
+
+@test "security: safe_rmdir rejects symlinked directories" {
+    local target="$TEST_HOME/real_dir"
+    local link="$TEST_HOME/linked_dir"
+    mkdir -p "$target"
+    echo "important data" > "$target/file.txt"
+    ln -s "$target" "$link"
+
+    run safe_rmdir "$link"
+    [ "$status" -ne 0 ]
+
+    # Original directory and its contents should still exist
+    [ -d "$target" ]
+    [ -f "$target/file.txt" ]
+}

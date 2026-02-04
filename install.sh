@@ -147,9 +147,9 @@ safe_rmdir() {
         return 0
     fi
 
-    # Never delete root or home
+    # Defense-in-depth: check against hardcoded system and user paths
     case "$(realpath "$path" 2>/dev/null || echo "$path")" in
-        /|/etc|/usr|/var|/bin|/sbin|/home|/root|"$HOME")
+        /|/etc|/usr|/var|/bin|/sbin|/home|/root|"$HOME"|"$HOME/Desktop"|"$HOME/Documents"|"$HOME/Downloads"|"$HOME/Library")
             print_error "Refusing to delete protected path: $path"
             return 1
             ;;
