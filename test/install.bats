@@ -605,6 +605,29 @@ EOF
     [[ "$output" == *"cannot contain '..'"* ]]
 }
 
+@test "security: validate_safe_path rejects shell metacharacters" {
+    # Test command injection attempt with semicolon
+    run validate_safe_path "$TEST_HOME/notes;echo injected" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"invalid characters"* ]]
+
+    # Test with quotes
+    run validate_safe_path "$TEST_HOME/notes\"rm" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    # Test with dollar sign (variable expansion)
+    run validate_safe_path "$TEST_HOME/notes\$PATH" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    # Test with backticks (command substitution)
+    run validate_safe_path "$TEST_HOME/notes\`id\`" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    # Test with pipe
+    run validate_safe_path "$TEST_HOME/notes|cat" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
 @test "security: validate_safe_path rejects protected directories" {
     # Create protected directories in test home
     mkdir -p "$TEST_HOME/Desktop"

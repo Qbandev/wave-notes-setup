@@ -80,6 +80,13 @@ validate_safe_path() {
         return 1
     fi
 
+    # Reject paths with shell metacharacters (prevents command injection)
+    # Allow: alphanumeric, /, -, _, ., ~, space (no $, ;, ", ', etc.)
+    if [[ "$path" =~ [^a-zA-Z0-9/_~.[:space:]-] ]]; then
+        print_error "Security: $name contains invalid characters: $path"
+        return 1
+    fi
+
     # Resolve to absolute path
     if ! resolved_path=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$path" 2>/dev/null); then
         print_error "Security: Unable to resolve $name path: $path"

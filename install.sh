@@ -102,6 +102,14 @@ validate_safe_path() {
         return 1
     fi
 
+    # Reject paths with shell metacharacters (prevents command injection)
+    # Allow: alphanumeric, /, -, _, ., ~, space (no $, ;, ", ', etc.)
+    if [[ "$path" =~ [^a-zA-Z0-9/_~.[:space:]-] ]]; then
+        print_error "$name contains invalid characters: $path"
+        print_error "Only alphanumeric characters, /, -, _, ., ~, and spaces are allowed"
+        return 1
+    fi
+
     # Resolve to absolute path without requiring parent directory
     if ! resolved=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$path" 2>/dev/null); then
         print_error "$name cannot be resolved: $path"
@@ -348,8 +356,11 @@ else
 fi
 SCRIPT_EOF
 
-    # Replace placeholder with actual path
-    sed -i '' "s|NOTES_DIR_PLACEHOLDER|$NOTES_DIR|g" "$script_path"
+    # Replace placeholder with actual path (escape for safe shell embedding)
+    # Use printf %q to escape any shell metacharacters
+    local escaped_notes_dir
+    escaped_notes_dir=$(printf '%s' "$NOTES_DIR" | sed 's/[&/\]/\\&/g')
+    sed -i '' "s|NOTES_DIR_PLACEHOLDER|$escaped_notes_dir|g" "$script_path"
 
     chmod +x "$script_path"
     print_success "Installed $script_path"
