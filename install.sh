@@ -93,7 +93,7 @@ check_not_symlink() {
 # F3: Path Traversal - Validate paths are within $HOME
 validate_safe_path() {
     local path="$1"
-    local name="$2"
+    local name="${2:-PATH}"
     local resolved
 
     # Reject paths with .. sequences (before directory may exist)
