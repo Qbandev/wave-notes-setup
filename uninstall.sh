@@ -71,17 +71,29 @@ check_not_symlink() {
 # Validate path is safe for deletion (not a system directory)
 validate_safe_path() {
     local path="$1"
+    local name="${2:-PATH}"
     local resolved_path
 
-    # Resolve to absolute path
-    resolved_path=$(cd "$(dirname "$path")" 2>/dev/null && pwd)/$(basename "$path")
+    # Reject paths with .. sequences (before directory may exist)
+    if [[ "$path" == *".."* ]]; then
+        print_error "Security: $name cannot contain '..' sequences: $path"
+        return 1
+    fi
 
-    # Block dangerous paths
+    # Resolve to absolute path
+    if ! resolved_path=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$path" 2>/dev/null); then
+        print_error "Security: Unable to resolve $name path: $path"
+        return 1
+    fi
+
+    # Must be under $HOME
+    if [[ "$resolved_path" != "$HOME"/* && "$resolved_path" != "$HOME" ]]; then
+        print_error "Security: $name must be under \$HOME: $path"
+        return 1
+    fi
+
+    # Block protected paths in HOME
     case "$resolved_path" in
-        /|/bin|/sbin|/usr|/usr/*|/etc|/etc/*|/var|/var/*|/tmp|/private|/private/*|/System|/System/*|/Library|/Library/*|/Applications|/Applications/*)
-            print_error "Security: Refusing to operate on system path: $resolved_path"
-            return 1
-            ;;
         "$HOME"|"$HOME/"|"$HOME/Documents"|"$HOME/Documents/"|"$HOME/Desktop"|"$HOME/Desktop/"|"$HOME/Downloads"|"$HOME/Downloads/"|"$HOME/Library"|"$HOME/Library/"*)
             # Allow subdirectories of Documents but not Documents itself
             if [[ "$resolved_path" == "$HOME" || "$resolved_path" == "$HOME/" || \

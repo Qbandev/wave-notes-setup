@@ -94,6 +94,7 @@ check_not_symlink() {
 validate_safe_path() {
     local path="$1"
     local name="$2"
+    local resolved
 
     # Reject paths with .. sequences (before directory may exist)
     if [[ "$path" == *".."* ]]; then
@@ -101,9 +102,11 @@ validate_safe_path() {
         return 1
     fi
 
-    # Resolve to absolute path
-    local resolved
-    resolved=$(cd "$(dirname "$path")" 2>/dev/null && pwd)/$(basename "$path") || resolved="$path"
+    # Resolve to absolute path without requiring parent directory
+    if ! resolved=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$path" 2>/dev/null); then
+        print_error "$name cannot be resolved: $path"
+        return 1
+    fi
 
     # Must be under $HOME
     if [[ "$resolved" != "$HOME"/* && "$resolved" != "$HOME" ]]; then
@@ -111,9 +114,9 @@ validate_safe_path() {
         return 1
     fi
 
-    # Blacklist critical paths
+    # Blacklist critical paths (with and without trailing slashes)
     case "$resolved" in
-        "$HOME"|"$HOME/"|"$HOME/Desktop"|"$HOME/Documents"|"$HOME/Downloads"|"$HOME/Library")
+        "$HOME"|"$HOME/"|"$HOME/Desktop"|"$HOME/Desktop/"|"$HOME/Documents"|"$HOME/Documents/"|"$HOME/Downloads"|"$HOME/Downloads/"|"$HOME/Library"|"$HOME/Library/")
             print_error "$name cannot be a protected directory: $path"
             return 1
             ;;
@@ -126,6 +129,10 @@ validate_safe_path() {
 safe_rmdir() {
     local path="$1"
 
+    if [[ ! -d "$path" ]]; then
+        return 0
+    fi
+
     # Never delete root or home
     case "$(realpath "$path" 2>/dev/null || echo "$path")" in
         /|/etc|/usr|/var|/bin|/sbin|/home|/root|"$HOME")
@@ -134,7 +141,14 @@ safe_rmdir() {
             ;;
     esac
 
+    if ! validate_safe_path "$path" "PATH"; then
+        return 1
+    fi
+
+    check_not_symlink "$path" || return 1
+
     rm -rf "$path"
+    return $?
 }
 
 # ============================================================================

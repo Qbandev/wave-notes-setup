@@ -632,6 +632,12 @@ EOF
     [ "$status" -eq 0 ]
 }
 
+@test "security: validate_safe_path accepts paths with missing parents" {
+    # Parent does not exist yet, but path is still under HOME
+    run validate_safe_path "$TEST_HOME/NewDir/WaveNotes" "TEST_PATH"
+    [ "$status" -eq 0 ]
+}
+
 @test "security: check_not_symlink detects symlinks" {
     local target="$TEST_HOME/real_file"
     local link="$TEST_HOME/symlink"
