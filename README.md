@@ -103,6 +103,17 @@ ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/WaveNotes ~/Documents/Wave
 - [Wave Terminal](https://www.waveterm.dev/)
 - `jq` (optional, falls back to Python if missing)
 
+## Security
+
+The installer implements several security measures:
+
+- **Path validation** - User-configurable paths must be under `$HOME` and cannot target protected directories
+- **Symlink protection** - Files are checked for symlinks before writing to prevent redirect attacks
+- **Safe deletion** - Directory removal blocks system paths (`/`, `/etc`, `/usr`, `$HOME`, etc.)
+- **No command injection** - All paths are passed safely to subprocesses, never embedded in code strings
+
+These protections ensure the installer cannot be tricked into overwriting system files or deleting critical directories, even with malicious configuration.
+
 ## How It Works
 
 The installer:
@@ -122,7 +133,7 @@ The project includes a comprehensive test suite using [bats](https://github.com/
 # Install bats
 brew install bats-core
 
-# Run all tests (46 tests)
+# Run all tests (77 tests)
 ./test/run_tests.sh
 
 # Or run bats directly

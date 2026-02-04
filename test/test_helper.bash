@@ -115,7 +115,8 @@ assert_json_has_key() {
             return 1
         fi
     else
-        if ! python3 -c "import json; d=json.load(open('$file')); assert '$key' in d" 2>/dev/null; then
+        # Pass file and key via sys.argv to prevent command injection
+        if ! python3 -c "import json, sys; d=json.load(open(sys.argv[1])); assert sys.argv[2] in d" "$file" "$key" 2>/dev/null; then
             echo "Expected JSON to have key: $key"
             return 1
         fi
@@ -132,8 +133,9 @@ assert_json_not_has_key() {
             return 1
         fi
     else
+        # Pass file and key via sys.argv to prevent command injection
         # Check if key EXISTS - if so, return error
-        if python3 -c "import json; d=json.load(open('$file')); assert '$key' in d" 2>/dev/null; then
+        if python3 -c "import json, sys; d=json.load(open(sys.argv[1])); assert sys.argv[2] in d" "$file" "$key" 2>/dev/null; then
             echo "Expected JSON NOT to have key: $key"
             return 1
         fi

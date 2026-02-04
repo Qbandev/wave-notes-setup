@@ -53,6 +53,98 @@ print_error() {
     echo -e "${RED}[✗] Error:${NC} $1" >&2
 }
 
+# ============================================================================
+# Security Functions
+# ============================================================================
+
+# Check that a path is not a symlink (prevents symlink attacks)
+check_not_symlink() {
+    local path="$1"
+    if [[ -L "$path" ]]; then
+        print_error "Refusing to overwrite symlink: $path"
+        print_error "This could be a security attack. Please remove the symlink manually."
+        return 1
+    fi
+    return 0
+}
+
+# Validate path is safe for deletion (not a system directory)
+# Synced with install.sh for consistency
+validate_safe_path() {
+    local path="$1"
+    local name="${2:-PATH}"
+    local resolved
+
+    # Reject paths with .. sequences (before directory may exist)
+    if [[ "$path" == *".."* ]]; then
+        print_error "$name cannot contain '..' sequences: $path"
+        return 1
+    fi
+
+    # Reject paths with shell metacharacters (prevents command injection)
+    # Allow: alphanumeric, /, -, _, ., ~, space (no $, ;, ", ', etc.)
+    if [[ "$path" =~ [^a-zA-Z0-9/_~.[:space:]-] ]]; then
+        print_error "$name contains invalid characters: $path"
+        print_error "Only alphanumeric characters, /, -, _, ., ~, and spaces are allowed"
+        return 1
+    fi
+
+    # Resolve to absolute path without requiring parent directory
+    if ! resolved=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$path" 2>/dev/null); then
+        print_error "$name cannot be resolved: $path"
+        return 1
+    fi
+
+    # Must be under $HOME
+    if [[ "$resolved" != "$HOME"/* && "$resolved" != "$HOME" ]]; then
+        print_error "$name must be under \$HOME: $path"
+        return 1
+    fi
+
+    # Blacklist critical paths (with and without trailing slashes)
+    case "$resolved" in
+        "$HOME"|"$HOME/"|"$HOME/Desktop"|"$HOME/Desktop/"|"$HOME/Documents"|"$HOME/Documents/"|"$HOME/Downloads"|"$HOME/Downloads/"|"$HOME/Library"|"$HOME/Library/")
+            print_error "$name cannot be a protected directory: $path"
+            return 1
+            ;;
+    esac
+
+    # Block anything in ~/Library (Library itself is caught above, this catches subdirs)
+    if [[ "$resolved" == "$HOME/Library/"* ]]; then
+        print_error "$name cannot be in Library: $path"
+        return 1
+    fi
+
+    return 0
+}
+
+# Safe directory removal with validation
+# Synced with install.sh for consistency
+safe_rmdir() {
+    local path="$1"
+
+    if [[ ! -d "$path" ]]; then
+        return 0
+    fi
+
+    # Defense-in-depth: check against hardcoded system and user paths
+    case "$(realpath "$path" 2>/dev/null || echo "$path")" in
+        /|/etc|/usr|/var|/bin|/sbin|/home|/root|"$HOME"|"$HOME/Desktop"|"$HOME/Documents"|"$HOME/Downloads"|"$HOME/Library")
+            print_error "Refusing to delete protected path: $path"
+            return 1
+            ;;
+    esac
+
+    if ! validate_safe_path "$path" "PATH"; then
+        return 1
+    fi
+
+    check_not_symlink "$path" || return 1
+
+    rm -rf "$path"
+    return $?
+}
+
 load_config() {
     NOTES_DIR="$DEFAULT_NOTES_DIR"
     BIN_DIR="$DEFAULT_BIN_DIR"
@@ -62,8 +154,16 @@ load_config() {
         while IFS='=' read -r key value; do
             [[ "$key" =~ ^#.*$ ]] && continue
             [[ -z "$key" ]] && continue
-            key=$(echo "$key" | xargs)
-            value=$(echo "$value" | xargs | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+            # Trim whitespace using parameter expansion (avoids xargs)
+            key="${key#"${key%%[![:space:]]*}"}"
+            key="${key%"${key##*[![:space:]]}"}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            # Remove surrounding quotes
+            value="${value#\"}"
+            value="${value%\"}"
+            value="${value#\'}"
+            value="${value%\'}"
             value="${value//\$HOME/$HOME}"
             case "$key" in
                 NOTES_DIR) NOTES_DIR="$value" ;;
@@ -93,16 +193,24 @@ remove_widgets() {
     if command -v jq >/dev/null 2>&1; then
         jq 'with_entries(select(.key | startswith("custom:notes-") | not))' "$widgets_file" > "$temp_file"
     else
+        # Pass paths via sys.argv to prevent command injection
         python3 -c "
 import json
-with open('$widgets_file', 'r') as f:
+import sys
+
+widgets_file = sys.argv[1]
+temp_file = sys.argv[2]
+
+with open(widgets_file, 'r') as f:
     data = json.load(f)
 filtered = {k: v for k, v in data.items() if not k.startswith('custom:notes-')}
-with open('$temp_file', 'w') as f:
+with open(temp_file, 'w') as f:
     json.dump(filtered, f, indent=2)
-"
+" "$widgets_file" "$temp_file"
     fi
 
+    # Check destination is not a symlink before writing
+    check_not_symlink "$widgets_file" || { rm -f "$temp_file"; return 1; }
     mv "$temp_file" "$widgets_file"
     print_success "Removed widgets from widgets.json"
 }
@@ -132,8 +240,11 @@ prompt_notes_deletion() {
     read -p "Delete notes folder $NOTES_DIR? This will delete all your notes! (y/N) " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf "$NOTES_DIR"
-        print_success "Deleted $NOTES_DIR"
+        if safe_rmdir "$NOTES_DIR"; then
+            print_success "Deleted $NOTES_DIR"
+        else
+            print_error "Failed to delete $NOTES_DIR (safety check failed)"
+        fi
     else
         echo "Keeping notes folder at $NOTES_DIR"
     fi
@@ -169,6 +280,10 @@ main() {
     echo ""
 
     load_config
+
+    # Validate paths are safe before proceeding
+    validate_safe_path "$NOTES_DIR" "NOTES_DIR" || exit 1
+    validate_safe_path "$BIN_DIR" "BIN_DIR" || exit 1
 
     # Check if Wave Terminal is installed
     if [[ -z "$WAVETERM_CONFIG" ]]; then

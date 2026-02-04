@@ -246,3 +246,122 @@ EOF
     [ -d "$NOTES_DIR" ]
     [ -f "$NOTES_DIR/note.md" ]
 }
+
+# =============================================================================
+# Security tests
+# =============================================================================
+
+@test "security: uninstall validate_safe_path rejects paths outside HOME" {
+    run validate_safe_path "/etc/evil" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "/tmp/notes" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: uninstall validate_safe_path rejects path traversal sequences" {
+    run validate_safe_path "$TEST_HOME/../../../etc/passwd" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"cannot contain '..'"* ]]
+
+    run validate_safe_path "$TEST_HOME/notes/../../../etc" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"cannot contain '..'"* ]]
+}
+
+@test "security: uninstall validate_safe_path rejects shell metacharacters" {
+    # Test command injection attempt with semicolon
+    run validate_safe_path "$TEST_HOME/notes;echo injected" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"invalid characters"* ]]
+
+    # Test with quotes
+    run validate_safe_path "$TEST_HOME/notes\"rm" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    # Test with dollar sign
+    run validate_safe_path "$TEST_HOME/notes\$PATH" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: uninstall validate_safe_path rejects protected directories" {
+    mkdir -p "$TEST_HOME/Desktop"
+    mkdir -p "$TEST_HOME/Documents"
+    mkdir -p "$TEST_HOME/Downloads"
+    mkdir -p "$TEST_HOME/Library"
+
+    run validate_safe_path "$TEST_HOME" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Desktop" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Documents" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Downloads" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Library" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: uninstall validate_safe_path rejects Library subdirectories" {
+    # Library subdirectories should also be protected
+    run validate_safe_path "$TEST_HOME/Library/Application Support" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"cannot be in Library"* ]]
+
+    run validate_safe_path "$TEST_HOME/Library/Preferences" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: uninstall validate_safe_path accepts valid paths under HOME" {
+    mkdir -p "$TEST_HOME/Documents/WaveNotes"
+    mkdir -p "$TEST_HOME/MyNotes"
+
+    run validate_safe_path "$TEST_HOME/Documents/WaveNotes" "TEST_PATH"
+    [ "$status" -eq 0 ]
+
+    run validate_safe_path "$TEST_HOME/MyNotes" "TEST_PATH"
+    [ "$status" -eq 0 ]
+}
+
+@test "security: uninstall validate_safe_path accepts paths with missing parents" {
+    run validate_safe_path "$TEST_HOME/NewDir/WaveNotes" "TEST_PATH"
+    [ "$status" -eq 0 ]
+}
+
+@test "security: uninstall check_not_symlink detects symlinks" {
+    local target="$TEST_HOME/real_file"
+    local link="$TEST_HOME/symlink"
+
+    echo "content" > "$target"
+    ln -s "$target" "$link"
+
+    run check_not_symlink "$link"
+    [ "$status" -ne 0 ]
+
+    run check_not_symlink "$target"
+    [ "$status" -eq 0 ]
+}
+
+@test "security: safe_rmdir rejects protected directories including Downloads" {
+    mkdir -p "$TEST_HOME/Desktop"
+    mkdir -p "$TEST_HOME/Documents"
+    mkdir -p "$TEST_HOME/Downloads"
+
+    run safe_rmdir "$TEST_HOME/Desktop"
+    [ "$status" -ne 0 ]
+
+    run safe_rmdir "$TEST_HOME/Documents"
+    [ "$status" -ne 0 ]
+
+    run safe_rmdir "$TEST_HOME/Downloads"
+    [ "$status" -ne 0 ]
+
+    # Verify directories still exist
+    [ -d "$TEST_HOME/Desktop" ]
+    [ -d "$TEST_HOME/Documents" ]
+    [ -d "$TEST_HOME/Downloads" ]
+}

@@ -582,3 +582,194 @@ EOF
     # Should have removed invalid file
     [ ! -f "$widgets_file" ]
 }
+
+# =============================================================================
+# Security Tests
+# =============================================================================
+
+@test "security: validate_safe_path rejects paths outside HOME" {
+    run validate_safe_path "/etc/evil" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "/tmp/notes" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: validate_safe_path rejects path traversal sequences" {
+    run validate_safe_path "$TEST_HOME/../../../etc/passwd" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"cannot contain '..'"* ]]
+
+    run validate_safe_path "$TEST_HOME/notes/../../../etc" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"cannot contain '..'"* ]]
+}
+
+@test "security: validate_safe_path rejects shell metacharacters" {
+    # Test command injection attempt with semicolon
+    run validate_safe_path "$TEST_HOME/notes;echo injected" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"invalid characters"* ]]
+
+    # Test with quotes
+    run validate_safe_path "$TEST_HOME/notes\"rm" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    # Test with dollar sign (variable expansion)
+    run validate_safe_path "$TEST_HOME/notes\$PATH" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    # Test with backticks (command substitution)
+    run validate_safe_path "$TEST_HOME/notes\`id\`" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    # Test with pipe
+    run validate_safe_path "$TEST_HOME/notes|cat" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: validate_safe_path rejects protected directories" {
+    # Create protected directories in test home
+    mkdir -p "$TEST_HOME/Desktop"
+    mkdir -p "$TEST_HOME/Documents"
+    mkdir -p "$TEST_HOME/Downloads"
+    mkdir -p "$TEST_HOME/Library"
+
+    run validate_safe_path "$TEST_HOME" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Desktop" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Documents" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Downloads" "TEST_PATH"
+    [ "$status" -ne 0 ]
+
+    run validate_safe_path "$TEST_HOME/Library" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: validate_safe_path rejects Library subdirectories" {
+    # Library subdirectories should also be protected
+    run validate_safe_path "$TEST_HOME/Library/Application Support" "TEST_PATH"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"cannot be in Library"* ]]
+
+    run validate_safe_path "$TEST_HOME/Library/Preferences" "TEST_PATH"
+    [ "$status" -ne 0 ]
+}
+
+@test "security: validate_safe_path accepts valid paths under HOME" {
+    # Create the test directories first
+    mkdir -p "$TEST_HOME/Documents/WaveNotes"
+    mkdir -p "$TEST_HOME/MyNotes"
+
+    run validate_safe_path "$TEST_HOME/Documents/WaveNotes" "TEST_PATH"
+    [ "$status" -eq 0 ]
+
+    run validate_safe_path "$TEST_HOME/MyNotes" "TEST_PATH"
+    [ "$status" -eq 0 ]
+}
+
+@test "security: validate_safe_path accepts paths with missing parents" {
+    # Parent does not exist yet, but path is still under HOME
+    run validate_safe_path "$TEST_HOME/NewDir/WaveNotes" "TEST_PATH"
+    [ "$status" -eq 0 ]
+}
+
+@test "security: check_not_symlink detects symlinks" {
+    local target="$TEST_HOME/real_file"
+    local link="$TEST_HOME/symlink"
+
+    echo "content" > "$target"
+    ln -s "$target" "$link"
+
+    run check_not_symlink "$link"
+    [ "$status" -ne 0 ]
+
+    run check_not_symlink "$target"
+    [ "$status" -eq 0 ]
+}
+
+@test "security: safe_rmdir allows deletion of safe paths" {
+    # Create a directory that's safe to delete
+    local safe_dir="$TEST_HOME/safe_to_delete"
+    mkdir -p "$safe_dir"
+    [ -d "$safe_dir" ]
+
+    # safe_rmdir should delete it
+    safe_rmdir "$safe_dir"
+    [ ! -d "$safe_dir" ]
+}
+
+@test "security: safe_rmdir output shows protection for root" {
+    # Test that attempting to delete root produces error message
+    run safe_rmdir "/"
+    [[ "$output" == *"Refusing to delete protected path"* ]] || [[ "$status" -ne 0 ]]
+}
+
+@test "security: install_scratchpad_script refuses to overwrite symlink" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    mkdir -p "$BIN_DIR"
+
+    # Create a symlink where script would be written
+    local target="$TEST_HOME/real_target"
+    echo "original" > "$target"
+    ln -s "$target" "$BIN_DIR/wave-scratch.sh"
+
+    run install_scratchpad_script
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"symlink"* ]]
+
+    # Original target should be unchanged
+    [ "$(cat "$target")" = "original" ]
+}
+
+@test "security: load_config handles special characters safely" {
+    # Test that command substitution in config values is not executed
+    cat > "$TEST_CONFIG_FILE" << 'EOF'
+NOTES_DIR=$HOME/Notes$(touch /tmp/pwned)
+EOF
+
+    load_config
+
+    # The file should NOT have been created (command not executed)
+    [ ! -f "/tmp/pwned" ]
+}
+
+@test "security: install_widgets refuses to overwrite symlinked widgets.json" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    WAVETERM_CONFIG="$TEST_WAVETERM_CONFIG"
+    mkdir -p "$BIN_DIR"
+
+    # Create symlink where widgets.json would be written
+    local target="$TEST_HOME/real_target.json"
+    echo '{"original": "content"}' > "$target"
+    ln -s "$target" "$WAVETERM_CONFIG/widgets.json"
+
+    run install_widgets
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"symlink"* ]]
+
+    # Original target should be unchanged
+    [[ "$(cat "$target")" == *"original"* ]]
+}
+
+@test "security: safe_rmdir rejects symlinked directories" {
+    local target="$TEST_HOME/real_dir"
+    local link="$TEST_HOME/linked_dir"
+    mkdir -p "$target"
+    echo "important data" > "$target/file.txt"
+    ln -s "$target" "$link"
+
+    run safe_rmdir "$link"
+    [ "$status" -ne 0 ]
+
+    # Original directory and its contents should still exist
+    [ -d "$target" ]
+    [ -f "$target/file.txt" ]
+}
