@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.2](https://github.com/Qbandev/wave-notes-setup/compare/v2.0.1...v2.0.2) (2026-02-12)
+
+
+### Bug Fixes
+
+* add swap token exchange for Wave Terminal v0.14.0+ ([65d7666](https://github.com/Qbandev/wave-notes-setup/commit/65d7666817510a85a56efd437dc601a3ac08374e))
+* add swap token exchange for Wave Terminal v0.14.0+ compatibility ([94c016f](https://github.com/Qbandev/wave-notes-setup/commit/94c016fd46701c8b9fa192db1a47f11db70d1963))
+* remove redundant WSH_CMD check, use printf over echo for safety ([a5a57fb](https://github.com/Qbandev/wave-notes-setup/commit/a5a57fb7cb2e6026e50df78cbe940a6f0a338936))
+* replace eval with direct JWT parsing in swap token exchange ([604620a](https://github.com/Qbandev/wave-notes-setup/commit/604620a7787c9c0fa6c1b2efd3abc3156eeaa403))
+* revert to eval for wsh token exchange ([bb9279f](https://github.com/Qbandev/wave-notes-setup/commit/bb9279f126881f0c44db1c6ca2f0b15cd10e1dd1))
+
 ## [2.0.1](https://github.com/Qbandev/wave-notes-setup/compare/v2.0.0...v2.0.1) (2026-02-04)
 
 
