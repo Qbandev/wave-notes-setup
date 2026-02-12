@@ -361,16 +361,12 @@ if [[ -z "$WSH_CMD" ]]; then
     exit 1
 fi
 
-# Wave Terminal v0.14.0+ token exchange for cmd controller blocks
+# Wave Terminal v0.14.0+ token exchange for cmd controller blocks.
+# wsh token outputs shell code setting multiple env vars needed by wsh
+# commands (not just WAVETERM_JWT), so eval is required here — matching
+# Wave's own integration at ~/Library/Application Support/waveterm/shell/bash/.bashrc
 if [[ -z "${WAVETERM_JWT:-}" && -n "${WAVETERM_SWAPTOKEN:-}" ]]; then
-    token_output="$("$WSH_CMD" token "$WAVETERM_SWAPTOKEN" bash 2>/dev/null || true)"
-    jwt_line=$(printf '%s\n' "$token_output" | grep -E '^export WAVETERM_JWT=' 2>/dev/null || true)
-    if [[ -n "${jwt_line:-}" ]]; then
-        WAVETERM_JWT=${jwt_line#export WAVETERM_JWT=}
-        WAVETERM_JWT=${WAVETERM_JWT#\"}
-        WAVETERM_JWT=${WAVETERM_JWT%\"}
-        export WAVETERM_JWT
-    fi
+    eval "$("$WSH_CMD" token "$WAVETERM_SWAPTOKEN" bash 2>/dev/null)" || true
 fi
 
 ERR_FILE=$(mktemp)
