@@ -97,10 +97,29 @@ mv ~/Documents/WaveNotes ~/Library/Mobile\ Documents/com~apple~CloudDocs/WaveNot
 ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/WaveNotes ~/Documents/WaveNotes
 ```
 
+## Troubleshooting
+
+### Widget fails after upgrading Wave Terminal to v0.14.0+
+
+Wave Terminal v0.14.0 changed how authentication works for widget commands. If your note widget stopped working after upgrading Wave Terminal (you may see an authentication error or the editor fails to open), re-run the installer to regenerate the script:
+
+```bash
+wave-notes-setup
+```
+
+This updates `~/bin/wave-scratch.sh` with the new token exchange mechanism. No data is lost — your existing notes and configuration are preserved.
+
+If you installed via Homebrew, update first:
+
+```bash
+brew upgrade wave-notes-setup
+wave-notes-setup
+```
+
 ## Requirements
 
 - macOS
-- [Wave Terminal](https://www.waveterm.dev/)
+- [Wave Terminal](https://www.waveterm.dev/) (v0.14.0+ supported with automatic swap token exchange)
 - `jq` (optional, falls back to Python if missing)
 
 ## Security
@@ -133,7 +152,7 @@ The project includes a comprehensive test suite using [bats](https://github.com/
 # Install bats
 brew install bats-core
 
-# Run all tests (77 tests)
+# Run all tests (85 tests)
 ./test/run_tests.sh
 
 # Or run bats directly

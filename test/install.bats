@@ -293,6 +293,92 @@ EOF
     assert_file_contains "$BIN_DIR/wave-scratch.sh" "find_wsh()"
 }
 
+@test "install_scratchpad_script: find_wsh includes .config/waveterm/bin/wsh path" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    mkdir -p "$BIN_DIR"
+
+    install_scratchpad_script
+
+    assert_file_contains "$BIN_DIR/wave-scratch.sh" '.config/waveterm/bin/wsh'
+}
+
+@test "install_scratchpad_script: find_wsh includes .waveterm/bin/wsh path" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    mkdir -p "$BIN_DIR"
+
+    install_scratchpad_script
+
+    assert_file_contains "$BIN_DIR/wave-scratch.sh" '.waveterm/bin/wsh'
+}
+
+@test "install_scratchpad_script: find_wsh lists new paths before old paths" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    mkdir -p "$BIN_DIR"
+
+    install_scratchpad_script
+
+    # .config/waveterm/bin/wsh should appear before /usr/local/bin/wsh
+    local config_line old_line
+    config_line=$(grep -n '.config/waveterm/bin/wsh' "$BIN_DIR/wave-scratch.sh" | head -1 | cut -d: -f1)
+    old_line=$(grep -n '/usr/local/bin/wsh' "$BIN_DIR/wave-scratch.sh" | head -1 | cut -d: -f1)
+    [ "$config_line" -lt "$old_line" ]
+}
+
+@test "install_scratchpad_script: contains swap token exchange logic" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    mkdir -p "$BIN_DIR"
+
+    install_scratchpad_script
+
+    assert_file_contains "$BIN_DIR/wave-scratch.sh" "WAVETERM_SWAPTOKEN"
+    assert_file_contains "$BIN_DIR/wave-scratch.sh" 'WSH_CMD.*token'
+}
+
+@test "install_scratchpad_script: uses mktemp for error handling" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    mkdir -p "$BIN_DIR"
+
+    install_scratchpad_script
+
+    assert_file_contains "$BIN_DIR/wave-scratch.sh" "mktemp"
+    assert_file_contains "$BIN_DIR/wave-scratch.sh" "ERR_FILE"
+}
+
+@test "install_scratchpad_script: swap token is backward compatible (no-op if JWT present)" {
+    NOTES_DIR="$TEST_HOME/TestNotes"
+    BIN_DIR="$TEST_HOME/TestBin"
+    mkdir -p "$BIN_DIR"
+
+    install_scratchpad_script
+
+    # The condition checks for empty WAVETERM_JWT, so it's a no-op if JWT is already set
+    # grep -F for fixed string since -z looks like a grep flag
+    grep -F 'WAVETERM_JWT' "$BIN_DIR/wave-scratch.sh" | grep -qF 'z "'
+}
+
+@test "VERSION consistency: VERSION file matches install.sh" {
+    local file_version
+    file_version=$(cat "$BATS_TEST_DIRNAME/../VERSION")
+    local script_version
+    script_version=$(grep 'x-release-please-version' "$BATS_TEST_DIRNAME/../install.sh" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+
+    [ "$file_version" = "$script_version" ]
+}
+
+@test "VERSION consistency: VERSION file matches uninstall.sh" {
+    local file_version
+    file_version=$(cat "$BATS_TEST_DIRNAME/../VERSION")
+    local script_version
+    script_version=$(grep 'x-release-please-version' "$BATS_TEST_DIRNAME/../uninstall.sh" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+
+    [ "$file_version" = "$script_version" ]
+}
+
 # =============================================================================
 # install_widgets() tests
 # =============================================================================
