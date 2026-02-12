@@ -1,10 +1,10 @@
 #!/bin/bash
-# wave-notes-setup uninstaller v1.0.0
+# wave-notes-setup uninstaller v2.0.1
 # https://github.com/qbandev/wave-notes-setup
 
 set -euo pipefail
 
-VERSION="1.0.0"
+VERSION="2.0.1" # x-release-please-version
 
 # Colors
 RED='\033[0;31m'

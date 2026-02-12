@@ -42,6 +42,22 @@ EOF
     export PATH="$TEST_BIN_DIR:$PATH"
 }
 
+# Create a mock wsh command that supports token exchange
+create_mock_wsh_with_token() {
+    local mock_wsh="$TEST_BIN_DIR/wsh"
+    cat > "$mock_wsh" << 'EOF'
+#!/bin/bash
+if [ "$1" = "token" ]; then
+    echo "export WAVETERM_JWT=mock-jwt-token"
+    exit 0
+fi
+echo "mock wsh called with: $@"
+exit 0
+EOF
+    chmod +x "$mock_wsh"
+    export PATH="$TEST_BIN_DIR:$PATH"
+}
+
 # Create a sample widgets.json with existing widgets
 create_sample_widgets_json() {
     local widgets_file="$TEST_WAVETERM_CONFIG/widgets.json"

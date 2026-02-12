@@ -60,3 +60,18 @@ jobs:
           done
 
           echo "All lint checks passed!"
+
+      - name: Check VERSION consistency
+        run: |
+          FILE_VERSION=$(cat VERSION)
+          SCRIPT_VERSION=$(grep 'x-release-please-version' install.sh | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          UNINSTALL_VERSION=$(grep 'x-release-please-version' uninstall.sh | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          if [ "$FILE_VERSION" != "$SCRIPT_VERSION" ]; then
+            echo "ERROR: VERSION ($FILE_VERSION) != install.sh ($SCRIPT_VERSION)"
+            exit 1
+          fi
+          if [ "$FILE_VERSION" != "$UNINSTALL_VERSION" ]; then
+            echo "ERROR: VERSION ($FILE_VERSION) != uninstall.sh ($UNINSTALL_VERSION)"
+            exit 1
+          fi
+          echo "VERSION consistency check passed: $FILE_VERSION"

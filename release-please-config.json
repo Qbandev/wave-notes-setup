@@ -6,9 +6,15 @@
       "package-name": "wave-notes-setup",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
+        "VERSION",
         {
           "type": "generic",
           "path": "install.sh",
+          "glob": false
+        },
+        {
+          "type": "generic",
+          "path": "uninstall.sh",
           "glob": false
         }
       ]
