@@ -363,7 +363,14 @@ fi
 
 # Wave Terminal v0.14.0+ token exchange for cmd controller blocks
 if [[ -z "${WAVETERM_JWT:-}" && -n "${WAVETERM_SWAPTOKEN:-}" && -n "$WSH_CMD" ]]; then
-    eval "$("$WSH_CMD" token "$WAVETERM_SWAPTOKEN" bash 2>/dev/null)" || true
+    token_output="$("$WSH_CMD" token "$WAVETERM_SWAPTOKEN" bash 2>/dev/null || true)"
+    jwt_line=$(printf '%s\n' "$token_output" | grep -E '^export WAVETERM_JWT=' 2>/dev/null || true)
+    if [[ -n "${jwt_line:-}" ]]; then
+        WAVETERM_JWT=${jwt_line#export WAVETERM_JWT=}
+        WAVETERM_JWT=${WAVETERM_JWT#\"}
+        WAVETERM_JWT=${WAVETERM_JWT%\"}
+        export WAVETERM_JWT
+    fi
 fi
 
 ERR_FILE=$(mktemp)
