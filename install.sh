@@ -631,8 +631,11 @@ run_uninstall() {
     local widgets_file="$WAVETERM_CONFIG/widgets.json"
     local script_path="$BIN_DIR/wave-scratch.sh"
 
-    # Remove widgets from widgets.json
-    if [[ -f "$widgets_file" ]]; then
+    # Check if Wave Terminal is installed
+    if [[ -z "$WAVETERM_CONFIG" ]]; then
+        print_warning "Wave Terminal config not found, skipping widget removal."
+    elif [[ -f "$widgets_file" ]]; then
+        # Remove widgets from widgets.json
         local temp_file
         temp_file=$(mktemp)
 
